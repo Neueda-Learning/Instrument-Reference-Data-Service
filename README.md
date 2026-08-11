@@ -49,3 +49,21 @@ dotnet run
 
 The API will be available at `https://localhost:5105`.  
 The OpenAPI spec is served at `https://localhost:5105/openapi/v1.json`.
+
+## Mock Data
+
+### Generate data
+
+Send a `POST` request to seed the database. `count` defaults to 50; `seed` is optional and makes generation deterministic.
+
+```bash
+curl -X POST "http://localhost:5105/api/mock-data/generate?count=50&seed=123"
+```
+
+### Retrieve instruments
+
+```bash
+curl "http://localhost:5105/api/instruments"
+```
+
+Optional query parameters: `status`, `assetClassId`, `exchangeId`, `issuerId`, `skip`, `take` (max 200).
