@@ -1,0 +1,6 @@
+@InstrumentReferenceDataService_HostAddress = http://localhost:5105
+
+GET {{InstrumentReferenceDataService_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
