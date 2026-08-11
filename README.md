@@ -21,7 +21,12 @@ git clone <repository-url>
 cd training-project
 ```
 
-### 2. Configure the database connection
+### 2. Download libraries
+```bash
+dotnet restore
+```
+
+### 3. Configure the database connection
 
 Connection strings are managed via [.NET User Secrets](https://learn.microsoft.com/en-us/aspnet/core/security/app-secrets) and are never committed to source control.
 
@@ -30,13 +35,13 @@ cd InstrumentReferenceDataService
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Server=localhost;Port=3306;Database=instrument_reference_db;User=<user>;Password=<password>;"
 ```
 
-### 3. Apply database migrations
+### 4. Apply database migrations
 
 ```bash
 dotnet ef database update
 ```
 
-### 4. Run the application
+### 5. Run the application
 
 ```bash
 dotnet run
