@@ -54,10 +54,23 @@ The OpenAPI spec is served at `https://localhost:5105/openapi/v1.json`.
 
 ### Generate data
 
-Send a `POST` request to seed the database. `count` defaults to 50; `seed` is optional and makes generation deterministic.
+**Endpoint:** `POST /api/mock-data/generate`
 
+This API endpoint allows you to generate mock instrument data and populate the database. It's useful for testing and development purposes.
+
+-   **`count` (optional, integer):** Specifies the number of instruments to generate. Defaults to 50 if not provided.
+-   **`seed` (optional, integer):** Provides a seed for the random data generation, making the generated data deterministic if the same seed is used.
+
+**Example Usage:**
+
+To generate 50 instruments:
 ```bash
-curl -X POST "http://localhost:5105/api/mock-data/generate?count=50&seed=123"
+curl -X POST http://localhost:5105/api/mock-data/generate
+```
+
+To generate 20 instruments with a specific seed:
+```bash
+curl -X POST "http://localhost:5105/api/mock-data/generate?count=20&seed=123"
 ```
 
 ### Retrieve instruments
