@@ -46,7 +46,14 @@ dotnet ef database update
 ```bash
 dotnet run
 ```
+### 6. Run the tests
 
+```bash
+
+cd InstrumentReferenceDataService.Tests
+
+dotnet test
+```
 The API will be available at `https://localhost:5105`.  
 The OpenAPI spec is served at `https://localhost:5105/openapi/v1.json`.
 
@@ -65,12 +72,12 @@ This API endpoint allows you to generate mock instrument data and populate the d
 
 To generate 50 instruments:
 ```bash
-curl -X POST http://localhost:5105/api/mock-data/generate
+curl.exe -X POST http://localhost:5105/api/mock-data/generate
 ```
 
 To generate 20 instruments with a specific seed:
 ```bash
-curl -X POST "http://localhost:5105/api/mock-data/generate?count=20&seed=123"
+curl.exe -X POST "http://localhost:5105/api/mock-data/generate?count=20&seed=123"
 ```
 
 ### Retrieve instruments
@@ -78,5 +85,9 @@ curl -X POST "http://localhost:5105/api/mock-data/generate?count=20&seed=123"
 ```bash
 curl "http://localhost:5105/api/instruments"
 ```
+### Look up instrument by ISIN
 
-Optional query parameters: `status`, `assetClassId`, `exchangeId`, `issuerId`, `skip`, `take` (max 200).
+```bash
+curl.exe  /api/instruments/lookup?isin={isin}
+```
+
