@@ -49,3 +49,34 @@ dotnet run
 
 The API will be available at `https://localhost:5105`.  
 The OpenAPI spec is served at `https://localhost:5105/openapi/v1.json`.
+
+## Mock Data
+
+### Generate data
+
+**Endpoint:** `POST /api/mock-data/generate`
+
+This API endpoint allows you to generate mock instrument data and populate the database. It's useful for testing and development purposes.
+
+-   **`count` (optional, integer):** Specifies the number of instruments to generate. Defaults to 50 if not provided.
+-   **`seed` (optional, integer):** Provides a seed for the random data generation, making the generated data deterministic if the same seed is used.
+
+**Example Usage:**
+
+To generate 50 instruments:
+```bash
+curl -X POST http://localhost:5105/api/mock-data/generate
+```
+
+To generate 20 instruments with a specific seed:
+```bash
+curl -X POST "http://localhost:5105/api/mock-data/generate?count=20&seed=123"
+```
+
+### Retrieve instruments
+
+```bash
+curl "http://localhost:5105/api/instruments"
+```
+
+Optional query parameters: `status`, `assetClassId`, `exchangeId`, `issuerId`, `skip`, `take` (max 200).
