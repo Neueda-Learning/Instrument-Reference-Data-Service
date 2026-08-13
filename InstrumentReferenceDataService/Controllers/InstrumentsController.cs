@@ -13,6 +13,21 @@ namespace InstrumentReferenceDataService.Controllers;
 public sealed class InstrumentsController : ControllerBase
 {
     private static readonly Regex IsinFormatRegex = new("^[A-Z]{2}[A-Z0-9]{9}[0-9]$", RegexOptions.Compiled);
+    private static readonly InstrumentQualityIndicatorResponse StatusMissingIndicator = new(
+        "STATUS_MISSING",
+        "Instrument status is null, empty, or whitespace.");
+    private static readonly InstrumentQualityIndicatorResponse PrimaryIsinFormatInvalidIndicator = new(
+        "PRIMARY_ISIN_FORMAT_INVALID",
+        "Primary ISIN does not match the expected 12-character ISIN format.");
+    private static readonly InstrumentQualityIndicatorResponse EffectiveDateAfterLastUpdatedIndicator = new(
+        "EFFECTIVE_DATE_AFTER_LAST_UPDATED",
+        "EffectiveDate is later than LastUpdated.");
+    private static readonly InstrumentQualityIndicatorResponse MissingPrimaryIsinIdentifierIndicator = new(
+        "PRIMARY_ISIN_IDENTIFIER_MISSING",
+        "No active ISIN identifier exists that matches the instrument PrimaryIsin.");
+    private static readonly InstrumentQualityIndicatorResponse IdentifierDateRangeInvalidIndicator = new(
+        "IDENTIFIER_DATE_RANGE_INVALID",
+        "At least one identifier has ExpiryDate earlier than EffectiveDate.");
     private readonly AppDbContext dbContext;
 
     public InstrumentsController(AppDbContext dbContext)
@@ -43,6 +58,74 @@ public sealed class InstrumentsController : ControllerBase
 
         var instrument = await BuildInstrumentDetailAsync(instrumentId, cancellationToken);
         return instrument is null ? NotFound() : Ok(instrument);
+    }
+
+    [HttpGet("quality-report")]
+    public async Task<ActionResult<IReadOnlyCollection<InstrumentQualityReportItemResponse>>> GetQualityReport(CancellationToken cancellationToken)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var instruments = await dbContext.Instruments
+            .AsNoTracking()
+            .Select(item => new
+            {
+                item.InstrumentId,
+                item.Name,
+                item.PrimaryIsin,
+                item.Status,
+                item.EffectiveDate,
+                item.LastUpdated,
+                HasMatchingPrimaryIsinIdentifier = item.Identifiers.Any(identifier =>
+                    identifier.IdentifierTypeId == "ISIN"
+                    && identifier.IdentifierValue == item.PrimaryIsin
+                    && identifier.EffectiveDate <= today
+                    && (identifier.ExpiryDate == null || identifier.ExpiryDate >= today)),
+                HasInvalidIdentifierDateRange = item.Identifiers.Any(identifier =>
+                    identifier.ExpiryDate != null && identifier.ExpiryDate < identifier.EffectiveDate)
+            })
+            .ToListAsync(cancellationToken);
+
+        var reportItems = instruments
+            .Select(item =>
+            {
+                var indicators = new List<InstrumentQualityIndicatorResponse>();
+
+                if (string.IsNullOrWhiteSpace(item.Status))
+                {
+                    indicators.Add(StatusMissingIndicator);
+                }
+
+                if (!IsinFormatRegex.IsMatch(item.PrimaryIsin ?? string.Empty))
+                {
+                    indicators.Add(PrimaryIsinFormatInvalidIndicator);
+                }
+
+                if (item.EffectiveDate > item.LastUpdated)
+                {
+                    indicators.Add(EffectiveDateAfterLastUpdatedIndicator);
+                }
+
+                if (!item.HasMatchingPrimaryIsinIdentifier)
+                {
+                    indicators.Add(MissingPrimaryIsinIdentifierIndicator);
+                }
+
+                if (item.HasInvalidIdentifierDateRange)
+                {
+                    indicators.Add(IdentifierDateRangeInvalidIndicator);
+                }
+
+                return new InstrumentQualityReportItemResponse(
+                    item.InstrumentId,
+                    item.Name,
+                    item.PrimaryIsin,
+                    indicators);
+            })
+            .Where(item => item.FailingIndicators.Count > 0)
+            .OrderBy(item => item.InstrumentId)
+            .ToList();
+
+        return Ok(reportItems);
     }
 
     [HttpPost]

@@ -42,6 +42,17 @@ public sealed record InstrumentDetailResponse(
     InstrumentSummaryResponse Instrument,
     IReadOnlyCollection<InstrumentIdentifierResponse> Identifiers,
     IReadOnlyCollection<InstrumentAuditResponse> Audits);
+
+public sealed record InstrumentQualityIndicatorResponse(
+    string Code,
+    string Description);
+
+public sealed record InstrumentQualityReportItemResponse(
+    string InstrumentId,
+    string Name,
+    string PrimaryIsin,
+    IReadOnlyCollection<InstrumentQualityIndicatorResponse> FailingIndicators);
+
 public sealed record CreateInstrumentRequest(
     [Required(AllowEmptyStrings = false)]
     [StringLength(40)]
