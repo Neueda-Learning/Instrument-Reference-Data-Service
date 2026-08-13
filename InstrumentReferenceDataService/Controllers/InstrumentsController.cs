@@ -67,27 +67,25 @@ public sealed class InstrumentsController : ControllerBase
         return Ok(instruments);
     }
 
-     [HttpDelete("{id}")]
-        public async Task<IActionResult> Delete(string id, CancellationToken cancellationToken)
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(string? id, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(id))
         {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                return BadRequest("Instrument id must not be empty.");
-            }
-
-            var instrument = await dbContext.Instruments
-                .SingleOrDefaultAsync(item => item.InstrumentId == id, cancellationToken);
-
-            if (instrument is null)
-            {
-                return NotFound();
-            }
-
-            dbContext.Instruments.Remove(instrument);
-            await dbContext.SaveChangesAsync(cancellationToken);
-
-            return NoContent();
+            return NotFound();
         }
+
+        var deletedCount = await dbContext.Instruments
+            .Where(item => item.InstrumentId == id)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        if (deletedCount == 0)
+        {
+            return NotFound();
+        }
+
+        return NoContent();
+    }
 
     private async Task<InstrumentDetailResponse?> BuildInstrumentDetailAsync(string instrumentId, CancellationToken cancellationToken)
     {

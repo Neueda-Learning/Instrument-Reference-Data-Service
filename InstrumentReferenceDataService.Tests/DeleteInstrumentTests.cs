@@ -101,7 +101,8 @@ public sealed class DeleteInstrumentTests : IAsyncLifetime
     [InlineData("   ")]
     public async Task Delete_WithWhitespaceId_ReturnsNotFound(string id)
     {
-        var response = await client.DeleteAsync($"/api/instruments/{id}");
+        var encodedId = Uri.EscapeDataString(id);
+        var response = await client.DeleteAsync($"/api/instruments/{encodedId}");
 
         Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
     }
