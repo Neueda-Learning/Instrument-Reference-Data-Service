@@ -42,22 +42,67 @@ public sealed class InstrumentsController : ControllerBase
         return instrument is null ? NotFound() : Ok(instrument);
     }
 
-    [HttpGet("lookup")]
-    public async Task<ActionResult<InstrumentDetailResponse>> LookupByIsin([FromQuery] string isin, CancellationToken cancellationToken)
+    [HttpGet]
+    public async Task<ActionResult<IReadOnlyCollection<InstrumentDetailResponse>>> Get(
+        [FromQuery] string? isin,
+        [FromQuery] string? cusip,
+        CancellationToken cancellationToken)
     {
-        var instrumentId = await dbContext.InstrumentIdentifiers
+        var instrumentIdsQuery = dbContext.Instruments
             .AsNoTracking()
-            .Where(item => item.IdentifierTypeId == "ISIN" && item.IdentifierValue == isin)
-            .Select(item => item.InstrumentId)
-            .SingleOrDefaultAsync(cancellationToken);
+            .Select(item => item.InstrumentId);
 
-        if (instrumentId is null)
+        if (!string.IsNullOrWhiteSpace(isin))
+        {
+            instrumentIdsQuery = instrumentIdsQuery.Where(instrumentId => dbContext.InstrumentIdentifiers
+                .Any(item => item.InstrumentId == instrumentId
+                    && item.IdentifierTypeId == "ISIN"
+                    && item.IdentifierValue == isin));
+        }
+
+        if (!string.IsNullOrWhiteSpace(cusip))
+        {
+            instrumentIdsQuery = instrumentIdsQuery.Where(instrumentId => dbContext.InstrumentIdentifiers
+                .Any(item => item.InstrumentId == instrumentId
+                    && item.IdentifierTypeId == "CUSIP"
+                    && item.IdentifierValue == cusip));
+        }
+
+        var instrumentIds = await instrumentIdsQuery
+            .OrderBy(item => item)
+            .ToListAsync(cancellationToken);
+
+        var instruments = new List<InstrumentDetailResponse>(instrumentIds.Count);
+        foreach (var instrumentId in instrumentIds)
+        {
+            var instrument = await BuildInstrumentDetailAsync(instrumentId, cancellationToken);
+            if (instrument is not null)
+            {
+                instruments.Add(instrument);
+            }
+        }
+
+        return Ok(instruments);
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(string? id, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(id))
         {
             return NotFound();
         }
 
-        var instrument = await BuildInstrumentDetailAsync(instrumentId, cancellationToken);
-        return instrument is null ? NotFound() : Ok(instrument);
+        var deletedCount = await dbContext.Instruments
+            .Where(item => item.InstrumentId == id)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        if (deletedCount == 0)
+        {
+            return NotFound();
+        }
+
+        return NoContent();
     }
 
     [HttpGet("quality-report")]
