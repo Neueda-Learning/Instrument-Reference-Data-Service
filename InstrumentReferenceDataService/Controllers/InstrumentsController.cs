@@ -24,6 +24,28 @@ public sealed class InstrumentsController : ControllerBase
         return instrument is null ? NotFound() : Ok(instrument);
     }
 
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(string id, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return BadRequest("Instrument id must not be empty.");
+        }
+
+        var instrument = await dbContext.Instruments
+            .SingleOrDefaultAsync(item => item.InstrumentId == id, cancellationToken);
+
+        if (instrument is null)
+        {
+            return NotFound();
+        }
+
+        dbContext.Instruments.Remove(instrument);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return NoContent();
+    }
+
     [HttpGet("lookup")]
     public async Task<ActionResult<InstrumentDetailResponse>> LookupByIsin([FromQuery] string isin, CancellationToken cancellationToken)
     {
