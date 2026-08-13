@@ -1,8 +1,10 @@
 using InstrumentReferenceDataService.Contracts;
 using InstrumentReferenceDataService.Data;
 using InstrumentReferenceDataService.Extensions;
+using InstrumentReferenceDataService.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
 
 namespace InstrumentReferenceDataService.Controllers;
 
@@ -10,6 +12,7 @@ namespace InstrumentReferenceDataService.Controllers;
 [Route("api/[controller]")]
 public sealed class InstrumentsController : ControllerBase
 {
+    private static readonly Regex IsinFormatRegex = new("^[A-Z]{2}[A-Z0-9]{9}[0-9]$", RegexOptions.Compiled);
     private readonly AppDbContext dbContext;
 
     public InstrumentsController(AppDbContext dbContext)
@@ -40,6 +43,137 @@ public sealed class InstrumentsController : ControllerBase
 
         var instrument = await BuildInstrumentDetailAsync(instrumentId, cancellationToken);
         return instrument is null ? NotFound() : Ok(instrument);
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<InstrumentDetailResponse>> Create([FromBody] CreateInstrumentRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.InstrumentId))
+        {
+            return BadRequest("InstrumentId is required");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            return BadRequest("Name is required");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.AssetClassId))
+        {
+            return BadRequest("AssetClassId is required");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Status))
+        {
+            return BadRequest("Status is required");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.PrimaryIsin))
+        {
+            return BadRequest("PrimaryIsin is required");
+        }
+
+        var normalizedIsin = request.PrimaryIsin.Trim().ToUpperInvariant();
+        if (!IsinFormatRegex.IsMatch(normalizedIsin))
+        {
+            return BadRequest("PrimaryIsin must be a valid 12-character ISIN");
+        }
+
+        // Check if instrument ID already exists
+        var existingInstrument = await dbContext.Instruments
+            .AnyAsync(i => i.InstrumentId == request.InstrumentId, cancellationToken);
+
+        if (existingInstrument)
+        {
+            return Conflict("An instrument with this ID already exists");
+        }
+
+        // Check if ISIN already exists
+        var existingIsin = await dbContext.Instruments
+            .AnyAsync(i => i.PrimaryIsin == normalizedIsin, cancellationToken);
+
+        if (!existingIsin)
+        {
+            existingIsin = await dbContext.InstrumentIdentifiers
+                .AnyAsync(i => i.IdentifierTypeId == "ISIN" && i.IdentifierValue == normalizedIsin, cancellationToken);
+        }
+
+        if (existingIsin)
+        {
+            return Conflict("An instrument with this ISIN already exists");
+        }
+
+        // Verify that all required foreign keys exist
+        var assetClassExists = await dbContext.AssetClasses
+            .AnyAsync(ac => ac.AssetClassId == request.AssetClassId, cancellationToken);
+
+        if (!assetClassExists)
+        {
+            return BadRequest($"AssetClass '{request.AssetClassId}' does not exist");
+        }
+
+        var sectorExists = await dbContext.Sectors
+            .AnyAsync(s => s.SectorId == request.SectorId, cancellationToken);
+
+        if (!sectorExists)
+        {
+            return BadRequest($"Sector with ID {request.SectorId} does not exist");
+        }
+
+        var exchangeExists = await dbContext.Exchanges
+            .AnyAsync(e => e.ExchangeId == request.ExchangeId, cancellationToken);
+
+        if (!exchangeExists)
+        {
+            return BadRequest($"Exchange with ID {request.ExchangeId} does not exist");
+        }
+
+        var currencyExists = await dbContext.Currencies
+            .AnyAsync(c => c.CurrencyId == request.CurrencyId, cancellationToken);
+
+        if (!currencyExists)
+        {
+            return BadRequest($"Currency with ID {request.CurrencyId} does not exist");
+        }
+
+        var issuerExists = await dbContext.Issuers
+            .AnyAsync(i => i.IssuerId == request.IssuerId, cancellationToken);
+
+        if (!issuerExists)
+        {
+            return BadRequest($"Issuer with ID {request.IssuerId} does not exist");
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var instrument = new Instrument
+        {
+            InstrumentId = request.InstrumentId,
+            Name = request.Name,
+            PrimaryIsin = normalizedIsin,
+            AssetClassId = request.AssetClassId,
+            SectorId = request.SectorId,
+            ExchangeId = request.ExchangeId,
+            CurrencyId = request.CurrencyId,
+            IssuerId = request.IssuerId,
+            Status = request.Status,
+            EffectiveDate = request.EffectiveDate,
+            LastUpdated = today
+        };
+
+        try
+        {
+            dbContext.Instruments.Add(instrument);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+           
+            return Conflict("An instrument with this InstrumentId or PrimaryIsin already exists in the database.");
+        }
+
+        var result = await BuildInstrumentDetailAsync(request.InstrumentId, cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = request.InstrumentId }, result);
     }
 
     private async Task<InstrumentDetailResponse?> BuildInstrumentDetailAsync(string instrumentId, CancellationToken cancellationToken)
