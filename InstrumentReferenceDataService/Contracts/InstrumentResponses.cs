@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace InstrumentReferenceDataService.Contracts;
 
 public sealed record InstrumentSummaryResponse(
@@ -40,3 +42,43 @@ public sealed record InstrumentDetailResponse(
     InstrumentSummaryResponse Instrument,
     IReadOnlyCollection<InstrumentIdentifierResponse> Identifiers,
     IReadOnlyCollection<InstrumentAuditResponse> Audits);
+
+public sealed record InstrumentQualityIndicatorResponse(
+    string Code,
+    string Description);
+
+public sealed record InstrumentQualityReportItemResponse(
+    string InstrumentId,
+    string Name,
+    string PrimaryIsin,
+    IReadOnlyCollection<InstrumentQualityIndicatorResponse> FailingIndicators);
+
+public sealed record CreateInstrumentRequest(
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(40)]
+    string InstrumentId,
+    
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(150)]
+    string Name,
+    
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(12, MinimumLength = 12)]
+    [RegularExpression("^[A-Z]{2}[A-Z0-9]{9}[0-9]$")]
+    string PrimaryIsin,
+    
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(32)]
+    string AssetClassId,
+    
+    int SectorId,
+    int ExchangeId,
+    int CurrencyId,
+    int IssuerId,
+    
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(32)]
+    string Status,
+    
+    DateOnly EffectiveDate
+);
