@@ -8,7 +8,7 @@ namespace InstrumentReferenceDataService.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public sealed class InstrumentsController : ControllerBase
+public sealed partial class InstrumentsController : ControllerBase
 {
     private readonly AppDbContext dbContext;
 
