@@ -54,6 +54,18 @@ cd InstrumentReferenceDataService.Tests
 
 dotnet test
 ```
+
+### 7. Run the frontend (React + Vite)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend starts at `http://localhost:5173` by default.
+If port `5173` is already in use, Vite will automatically use the next available port (for example, `http://localhost:5174`).
+
 The API will be available at `http://localhost:5105`.  
 The OpenAPI/Swagger spec is available at `http://localhost:5105/swagger/ui` (when built in Debug mode).
 
@@ -142,7 +154,6 @@ curl -X GET "http://localhost:5105/api/instruments?cusip=000000001" \
 
 ---
 
-<<<<<<< HEAD
 #### Contract Lookup Endpoints
 
 The API contract includes dedicated lookup routes:
@@ -177,8 +188,6 @@ curl -X GET "http://localhost:5105/api/instruments?cusip=000000001" \
 
 ---
 
-=======
->>>>>>> d84bf0ec78191b914f62e418a306472267365919
 #### 2. Get Instrument by ID
 Retrieve a specific instrument by its ID.
 
@@ -367,11 +376,7 @@ curl -X DELETE "http://localhost:5105/api/instruments/INS-20260811131902-0001"
 
 ---
 
-<<<<<<< HEAD
 #### 7. Get Quality Report
-=======
-#### 5. Get Quality Report
->>>>>>> d84bf0ec78191b914f62e418a306472267365919
 Retrieve instruments that fail data quality checks.
 
 **Request:**
