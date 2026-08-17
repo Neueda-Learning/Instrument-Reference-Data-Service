@@ -17,6 +17,47 @@ public sealed partial class InstrumentsController
             return NotFound();
         }
 
+        // Verify that all required foreign keys exist
+        var assetClassExists = await dbContext.AssetClasses
+            .AnyAsync(ac => ac.AssetClassId == request.AssetClassId, cancellationToken);
+
+        if (!assetClassExists)
+        {
+            return BadRequest($"AssetClass '{request.AssetClassId}' does not exist");
+        }
+
+        var sectorExists = await dbContext.Sectors
+            .AnyAsync(s => s.SectorId == request.SectorId, cancellationToken);
+
+        if (!sectorExists)
+        {
+            return BadRequest($"Sector with ID {request.SectorId} does not exist");
+        }
+
+        var exchangeExists = await dbContext.Exchanges
+            .AnyAsync(e => e.ExchangeId == request.ExchangeId, cancellationToken);
+
+        if (!exchangeExists)
+        {
+            return BadRequest($"Exchange with ID {request.ExchangeId} does not exist");
+        }
+
+        var currencyExists = await dbContext.Currencies
+            .AnyAsync(c => c.CurrencyId == request.CurrencyId, cancellationToken);
+
+        if (!currencyExists)
+        {
+            return BadRequest($"Currency with ID {request.CurrencyId} does not exist");
+        }
+
+        var issuerExists = await dbContext.Issuers
+            .AnyAsync(i => i.IssuerId == request.IssuerId, cancellationToken);
+
+        if (!issuerExists)
+        {
+            return BadRequest($"Issuer with ID {request.IssuerId} does not exist");
+        }
+
         var changedAt = DateTime.UtcNow;
         var hasBusinessChanges = false;
 

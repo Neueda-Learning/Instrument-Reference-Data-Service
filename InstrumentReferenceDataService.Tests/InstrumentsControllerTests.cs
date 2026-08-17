@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using InstrumentReferenceDataService.Contracts;
+using InstrumentReferenceDataService.Controllers;
 using InstrumentReferenceDataService.Data;
 using InstrumentReferenceDataService.Models;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -721,5 +722,317 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
             });
 
         await dbContext.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task Update_WithNonExistentAssetClass_ReturnsBadRequest()
+    {
+        await SeedReferenceDataAsync();
+
+        var instrumentId = $"INS-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
+        var primaryIsin = $"US{Guid.NewGuid().ToString("N").Substring(0, 9).ToUpper()}1";
+
+        await using (var scope = webApplicationFactory.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            dbContext.Instruments.Add(new Instrument
+            {
+                InstrumentId = instrumentId,
+                Name = "Update Test Instrument",
+                PrimaryIsin = primaryIsin,
+                AssetClassId = "EQ",
+                SectorId = 1,
+                ExchangeId = 1,
+                CurrencyId = 1,
+                IssuerId = 1,
+                Status = "Active",
+                EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                LastUpdated = DateOnly.FromDateTime(DateTime.UtcNow)
+            });
+
+            await dbContext.SaveChangesAsync();
+        }
+
+        var request = new UpdateInstrumentRequest(
+            "Updated Name",
+            "NONEXISTENT",
+            1,
+            1,
+            1,
+            1,
+            "Active",
+            DateOnly.FromDateTime(DateTime.UtcNow)
+        );
+
+        var jsonContent = new StringContent(
+            JsonSerializer.Serialize(request),
+            Encoding.UTF8,
+            "application/json"
+        );
+
+        var response = await httpClient.PutAsync($"/api/instruments/{instrumentId}", jsonContent);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_WithNonExistentSector_ReturnsBadRequest()
+    {
+        await SeedReferenceDataAsync();
+
+        var instrumentId = $"INS-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
+        var primaryIsin = $"US{Guid.NewGuid().ToString("N").Substring(0, 9).ToUpper()}1";
+
+        await using (var scope = webApplicationFactory.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            dbContext.Instruments.Add(new Instrument
+            {
+                InstrumentId = instrumentId,
+                Name = "Update Test Instrument",
+                PrimaryIsin = primaryIsin,
+                AssetClassId = "EQ",
+                SectorId = 1,
+                ExchangeId = 1,
+                CurrencyId = 1,
+                IssuerId = 1,
+                Status = "Active",
+                EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                LastUpdated = DateOnly.FromDateTime(DateTime.UtcNow)
+            });
+
+            await dbContext.SaveChangesAsync();
+        }
+
+        var request = new UpdateInstrumentRequest(
+            "Updated Name",
+            "EQ",
+            99999,
+            1,
+            1,
+            1,
+            "Active",
+            DateOnly.FromDateTime(DateTime.UtcNow)
+        );
+
+        var jsonContent = new StringContent(
+            JsonSerializer.Serialize(request),
+            Encoding.UTF8,
+            "application/json"
+        );
+
+        var response = await httpClient.PutAsync($"/api/instruments/{instrumentId}", jsonContent);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_WithNonExistentExchange_ReturnsBadRequest()
+    {
+        await SeedReferenceDataAsync();
+
+        var instrumentId = $"INS-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
+        var primaryIsin = $"US{Guid.NewGuid().ToString("N").Substring(0, 9).ToUpper()}1";
+
+        await using (var scope = webApplicationFactory.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            dbContext.Instruments.Add(new Instrument
+            {
+                InstrumentId = instrumentId,
+                Name = "Update Test Instrument",
+                PrimaryIsin = primaryIsin,
+                AssetClassId = "EQ",
+                SectorId = 1,
+                ExchangeId = 1,
+                CurrencyId = 1,
+                IssuerId = 1,
+                Status = "Active",
+                EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                LastUpdated = DateOnly.FromDateTime(DateTime.UtcNow)
+            });
+
+            await dbContext.SaveChangesAsync();
+        }
+
+        var request = new UpdateInstrumentRequest(
+            "Updated Name",
+            "EQ",
+            1,
+            99999,
+            1,
+            1,
+            "Active",
+            DateOnly.FromDateTime(DateTime.UtcNow)
+        );
+
+        var jsonContent = new StringContent(
+            JsonSerializer.Serialize(request),
+            Encoding.UTF8,
+            "application/json"
+        );
+
+        var response = await httpClient.PutAsync($"/api/instruments/{instrumentId}", jsonContent);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_WithNonExistentCurrency_ReturnsBadRequest()
+    {
+        await SeedReferenceDataAsync();
+
+        var instrumentId = $"INS-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
+        var primaryIsin = $"US{Guid.NewGuid().ToString("N").Substring(0, 9).ToUpper()}1";
+
+        await using (var scope = webApplicationFactory.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            dbContext.Instruments.Add(new Instrument
+            {
+                InstrumentId = instrumentId,
+                Name = "Update Test Instrument",
+                PrimaryIsin = primaryIsin,
+                AssetClassId = "EQ",
+                SectorId = 1,
+                ExchangeId = 1,
+                CurrencyId = 1,
+                IssuerId = 1,
+                Status = "Active",
+                EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                LastUpdated = DateOnly.FromDateTime(DateTime.UtcNow)
+            });
+
+            await dbContext.SaveChangesAsync();
+        }
+
+        var request = new UpdateInstrumentRequest(
+            "Updated Name",
+            "EQ",
+            1,
+            1,
+            99999,
+            1,
+            "Active",
+            DateOnly.FromDateTime(DateTime.UtcNow)
+        );
+
+        var jsonContent = new StringContent(
+            JsonSerializer.Serialize(request),
+            Encoding.UTF8,
+            "application/json"
+        );
+
+        var response = await httpClient.PutAsync($"/api/instruments/{instrumentId}", jsonContent);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_WithNonExistentIssuer_ReturnsBadRequest()
+    {
+        await SeedReferenceDataAsync();
+
+        var instrumentId = $"INS-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
+        var primaryIsin = $"US{Guid.NewGuid().ToString("N").Substring(0, 9).ToUpper()}1";
+
+        await using (var scope = webApplicationFactory.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            dbContext.Instruments.Add(new Instrument
+            {
+                InstrumentId = instrumentId,
+                Name = "Update Test Instrument",
+                PrimaryIsin = primaryIsin,
+                AssetClassId = "EQ",
+                SectorId = 1,
+                ExchangeId = 1,
+                CurrencyId = 1,
+                IssuerId = 1,
+                Status = "Active",
+                EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                LastUpdated = DateOnly.FromDateTime(DateTime.UtcNow)
+            });
+
+            await dbContext.SaveChangesAsync();
+        }
+
+        var request = new UpdateInstrumentRequest(
+            "Updated Name",
+            "EQ",
+            1,
+            1,
+            1,
+            99999,
+            "Active",
+            DateOnly.FromDateTime(DateTime.UtcNow)
+        );
+
+        var jsonContent = new StringContent(
+            JsonSerializer.Serialize(request),
+            Encoding.UTF8,
+            "application/json"
+        );
+
+        var response = await httpClient.PutAsync($"/api/instruments/{instrumentId}", jsonContent);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_WithValidIds_ReturnsNoContent()
+    {
+        await SeedReferenceDataAsync();
+
+        var instrumentId = $"INS-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
+        var primaryIsin = $"US{Guid.NewGuid().ToString("N").Substring(0, 9).ToUpper()}1";
+
+        await using (var scope = webApplicationFactory.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            dbContext.Instruments.Add(new Instrument
+            {
+                InstrumentId = instrumentId,
+                Name = "Update Test Instrument",
+                PrimaryIsin = primaryIsin,
+                AssetClassId = "EQ",
+                SectorId = 1,
+                ExchangeId = 1,
+                CurrencyId = 1,
+                IssuerId = 1,
+                Status = "Active",
+                EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                LastUpdated = DateOnly.FromDateTime(DateTime.UtcNow)
+            });
+
+            await dbContext.SaveChangesAsync();
+        }
+
+        var request = new UpdateInstrumentRequest(
+            "Updated Name",
+            "EQ",
+            1,
+            1,
+            1,
+            1,
+            "Active",
+            DateOnly.FromDateTime(DateTime.UtcNow)
+        );
+
+        var jsonContent = new StringContent(
+            JsonSerializer.Serialize(request),
+            Encoding.UTF8,
+            "application/json"
+        );
+
+        var response = await httpClient.PutAsync($"/api/instruments/{instrumentId}", jsonContent);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 }
