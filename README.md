@@ -142,6 +142,7 @@ curl -X GET "http://localhost:5105/api/instruments?cusip=000000001" \
 
 ---
 
+<<<<<<< HEAD
 #### Contract Lookup Endpoints
 
 The API contract includes dedicated lookup routes:
@@ -176,6 +177,8 @@ curl -X GET "http://localhost:5105/api/instruments?cusip=000000001" \
 
 ---
 
+=======
+>>>>>>> d84bf0ec78191b914f62e418a306472267365919
 #### 2. Get Instrument by ID
 Retrieve a specific instrument by its ID.
 
@@ -364,7 +367,11 @@ curl -X DELETE "http://localhost:5105/api/instruments/INS-20260811131902-0001"
 
 ---
 
+<<<<<<< HEAD
 #### 7. Get Quality Report
+=======
+#### 5. Get Quality Report
+>>>>>>> d84bf0ec78191b914f62e418a306472267365919
 Retrieve instruments that fail data quality checks.
 
 **Request:**
