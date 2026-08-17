@@ -43,6 +43,30 @@ public sealed record InstrumentDetailResponse(
     IReadOnlyCollection<InstrumentIdentifierResponse> Identifiers,
     IReadOnlyCollection<InstrumentAuditResponse> Audits);
 
+public sealed record PagedResultResponse<T>(
+    IReadOnlyCollection<T> Items,
+    int TotalCount,
+    int PageNumber,
+    int PageSize);
+
+public sealed record MonitoringInstrumentItemResponse(
+    string InstrumentId,
+    string Name,
+    DateOnly LastUpdated,
+    int AgeDays);
+
+public sealed record MonitoringAnomalyItemResponse(
+    string InstrumentId,
+    string Name,
+    DateOnly LastUpdated,
+    string Reason);
+
+public sealed record MonitoringDataResponse(
+    int FreshnessScore,
+    PagedResultResponse<MonitoringInstrumentItemResponse> Stale,
+    PagedResultResponse<MonitoringInstrumentItemResponse> Recent,
+    PagedResultResponse<MonitoringAnomalyItemResponse> Anomalies);
+
 public sealed record InstrumentQualityIndicatorResponse(
     string Code,
     string Description);
