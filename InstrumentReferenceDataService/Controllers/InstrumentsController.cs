@@ -4,6 +4,7 @@ using InstrumentReferenceDataService.Extensions;
 using InstrumentReferenceDataService.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Text.RegularExpressions;
 
 namespace InstrumentReferenceDataService.Controllers;
@@ -29,17 +30,27 @@ public sealed class InstrumentsController : ControllerBase
         "IDENTIFIER_DATE_RANGE_INVALID",
         "At least one identifier has ExpiryDate earlier than EffectiveDate.");
     private readonly AppDbContext dbContext;
+    private readonly ILogger<InstrumentsController> logger;
 
-    public InstrumentsController(AppDbContext dbContext)
+    public InstrumentsController(AppDbContext dbContext, ILogger<InstrumentsController> logger)
     {
         this.dbContext = dbContext;
+        this.logger = logger;
     }
 
     [HttpGet("{id}")]
     public async Task<ActionResult<InstrumentDetailResponse>> GetById(string id, CancellationToken cancellationToken)
     {
+        logger.LogInformation("Attempting to retrieve instrument by ID: {InstrumentId}", id);
         var instrument = await BuildInstrumentDetailAsync(id, cancellationToken);
-        return instrument is null ? NotFound() : Ok(instrument);
+        if (instrument is null)
+        {
+            logger.LogWarning("Instrument with ID: {InstrumentId} not found", id);
+            return NotFound();
+        }
+        
+        logger.LogInformation("Successfully retrieved instrument with ID: {InstrumentId}", id);
+        return Ok(instrument);
     }
 
     [HttpGet]
@@ -48,6 +59,7 @@ public sealed class InstrumentsController : ControllerBase
         [FromQuery] string? cusip,
         CancellationToken cancellationToken)
     {
+        logger.LogInformation("Querying for instruments with ISIN: {ISIN} and CUSIP: {CUSIP}", isin, cusip);
         var instrumentIdsQuery = dbContext.Instruments
             .AsNoTracking()
             .Select(item => item.InstrumentId);
@@ -81,15 +93,18 @@ public sealed class InstrumentsController : ControllerBase
                 instruments.Add(instrument);
             }
         }
-
+        
+        logger.LogInformation("Found {Count} instruments matching query.", instruments.Count);
         return Ok(instruments);
     }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(string? id, CancellationToken cancellationToken)
     {
+        logger.LogInformation("Attempting to delete instrument with ID: {InstrumentId}", id);
         if (string.IsNullOrWhiteSpace(id))
         {
+            logger.LogWarning("Delete failed: Instrument ID was null or whitespace.");
             return NotFound();
         }
 
@@ -99,15 +114,18 @@ public sealed class InstrumentsController : ControllerBase
 
         if (deletedCount == 0)
         {
+            logger.LogWarning("Delete failed: Instrument with ID: {InstrumentId} not found.", id);
             return NotFound();
         }
 
+        logger.LogInformation("Successfully deleted instrument with ID: {InstrumentId}", id);
         return NoContent();
     }
 
     [HttpGet("quality-report")]
     public async Task<ActionResult<IReadOnlyCollection<InstrumentQualityReportItemResponse>>> GetQualityReport(CancellationToken cancellationToken)
     {
+        logger.LogInformation("Generating data quality report.");
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         var instruments = await dbContext.Instruments
@@ -169,41 +187,50 @@ public sealed class InstrumentsController : ControllerBase
             .Where(item => item.FailingIndicators.Count > 0)
             .OrderBy(item => item.InstrumentId)
             .ToList();
-
+        
+        logger.LogInformation("Data quality report generated. Found {Count} instruments with issues.", reportItems.Count);
         return Ok(reportItems);
     }
 
     [HttpPost]
     public async Task<ActionResult<InstrumentDetailResponse>> Create([FromBody] CreateInstrumentRequest request, CancellationToken cancellationToken)
     {
+        logger.LogInformation("Received request to create instrument with ID: {InstrumentId}", request.InstrumentId);
+        
         if (string.IsNullOrWhiteSpace(request.InstrumentId))
         {
+            logger.LogWarning("Validation failed for new instrument: InstrumentId is required.");
             return BadRequest("InstrumentId is required");
         }
 
         if (string.IsNullOrWhiteSpace(request.Name))
         {
+            logger.LogWarning("Validation failed for new instrument {InstrumentId}: Name is required.", request.InstrumentId);
             return BadRequest("Name is required");
         }
 
         if (string.IsNullOrWhiteSpace(request.AssetClassId))
         {
+            logger.LogWarning("Validation failed for new instrument {InstrumentId}: AssetClassId is required.", request.InstrumentId);
             return BadRequest("AssetClassId is required");
         }
 
         if (string.IsNullOrWhiteSpace(request.Status))
         {
+            logger.LogWarning("Validation failed for new instrument {InstrumentId}: Status is required.", request.InstrumentId);
             return BadRequest("Status is required");
         }
 
         if (string.IsNullOrWhiteSpace(request.PrimaryIsin))
         {
+            logger.LogWarning("Validation failed for new instrument {InstrumentId}: PrimaryIsin is required.", request.InstrumentId);
             return BadRequest("PrimaryIsin is required");
         }
 
         var normalizedIsin = request.PrimaryIsin.Trim().ToUpperInvariant();
         if (!IsinFormatRegex.IsMatch(normalizedIsin))
         {
+            logger.LogWarning("Validation failed for new instrument {InstrumentId}: PrimaryIsin '{PrimaryIsin}' has an invalid format.", request.InstrumentId, request.PrimaryIsin);
             return BadRequest("PrimaryIsin must be a valid 12-character ISIN");
         }
 
@@ -213,6 +240,7 @@ public sealed class InstrumentsController : ControllerBase
 
         if (existingInstrument)
         {
+            logger.LogWarning("Conflict: An instrument with ID {InstrumentId} already exists.", request.InstrumentId);
             return Conflict("An instrument with this ID already exists");
         }
 
@@ -228,6 +256,7 @@ public sealed class InstrumentsController : ControllerBase
 
         if (existingIsin)
         {
+            logger.LogWarning("Conflict: An instrument with ISIN {PrimaryIsin} already exists.", normalizedIsin);
             return Conflict("An instrument with this ISIN already exists");
         }
 
@@ -237,6 +266,7 @@ public sealed class InstrumentsController : ControllerBase
 
         if (!assetClassExists)
         {
+            logger.LogWarning("Validation failed for new instrument {InstrumentId}: AssetClass '{AssetClassId}' does not exist.", request.InstrumentId, request.AssetClassId);
             return BadRequest($"AssetClass '{request.AssetClassId}' does not exist");
         }
 
@@ -245,6 +275,7 @@ public sealed class InstrumentsController : ControllerBase
 
         if (!sectorExists)
         {
+            logger.LogWarning("Validation failed for new instrument {InstrumentId}: Sector '{SectorId}' does not exist.", request.InstrumentId, request.SectorId);
             return BadRequest($"Sector with ID {request.SectorId} does not exist");
         }
 
@@ -253,6 +284,7 @@ public sealed class InstrumentsController : ControllerBase
 
         if (!exchangeExists)
         {
+            logger.LogWarning("Validation failed for new instrument {InstrumentId}: Exchange '{ExchangeId}' does not exist.", request.InstrumentId, request.ExchangeId);
             return BadRequest($"Exchange with ID {request.ExchangeId} does not exist");
         }
 
@@ -261,6 +293,7 @@ public sealed class InstrumentsController : ControllerBase
 
         if (!currencyExists)
         {
+            logger.LogWarning("Validation failed for new instrument {InstrumentId}: Currency '{CurrencyId}' does not exist.", request.InstrumentId, request.CurrencyId);
             return BadRequest($"Currency with ID {request.CurrencyId} does not exist");
         }
 
@@ -269,6 +302,7 @@ public sealed class InstrumentsController : ControllerBase
 
         if (!issuerExists)
         {
+            logger.LogWarning("Validation failed for new instrument {InstrumentId}: Issuer '{IssuerId}' does not exist.", request.InstrumentId, request.IssuerId);
             return BadRequest($"Issuer with ID {request.IssuerId} does not exist");
         }
 
@@ -293,10 +327,11 @@ public sealed class InstrumentsController : ControllerBase
         {
             dbContext.Instruments.Add(instrument);
             await dbContext.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Successfully created instrument with ID {InstrumentId} and ISIN {PrimaryIsin}", instrument.InstrumentId, instrument.PrimaryIsin);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex)
         {
-           
+            logger.LogError(ex, "Database error occurred while creating instrument {InstrumentId}.", request.InstrumentId);
             return Conflict("An instrument with this InstrumentId or PrimaryIsin already exists in the database.");
         }
 

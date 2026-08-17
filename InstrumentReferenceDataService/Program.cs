@@ -10,6 +10,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>();
 builder.Services.AddScoped<MockDataGenerator>();
+builder.Services.AddHostedService<DataQualityCheckService>();
 builder.Services.AddControllers();
 
 var useSqlite = builder.Environment.IsEnvironment("Testing") || builder.Configuration.GetValue<bool>("UseSqlite");
