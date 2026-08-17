@@ -188,6 +188,27 @@ function App() {
     setIsMetadataModalOpen(false)
   }
 
+  const handleDeleteInstrument = async () => {
+    if (!selectedInstrumentDetail) return
+    const { instrumentId, name } = selectedInstrumentDetail.instrument
+    if (!window.confirm(`Are you sure you want to delete "${name}" (${instrumentId})? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/instruments/${instrumentId}`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`)
+      }
+      setIsMetadataModalOpen(false)
+      loadHomeInstruments()
+    } catch {
+      setMetadataError('Failed to delete the instrument. Please try again.')
+    }
+  }
+
   const handleApplyMonitorQuickFilter = (type, context = {}) => {
     if (type === 'all') {
       setMonitorQuickFilter({
@@ -361,14 +382,25 @@ function App() {
             aria-label="Instrument Full Metadata"
             onClick={(event) => event.stopPropagation()}
           >
-            <button
-              type="button"
-              className="metadata-modal-close"
-              onClick={handleCloseMetadataModal}
-              aria-label="Close metadata modal"
-            >
-              Close
-            </button>
+            <div className="metadata-modal-actions">
+              <button
+                type="button"
+                className="metadata-modal-close"
+                onClick={handleCloseMetadataModal}
+                aria-label="Close metadata modal"
+              >
+                Close
+              </button>
+              {!isLoadingMetadata && !metadataError && selectedInstrumentDetail ? (
+                <button
+                  type="button"
+                  className="button button-danger"
+                  onClick={handleDeleteInstrument}
+                >
+                  Delete Instrument
+                </button>
+              ) : null}
+            </div>
             {isLoadingMetadata ? <p className="status-message">Loading metadata...</p> : null}
             {!isLoadingMetadata && metadataError ? <p className="status-message error">{metadataError}</p> : null}
             {!isLoadingMetadata && !metadataError ? <InstrumentMetadataPanel row={selectedInstrumentDetail} /> : null}
