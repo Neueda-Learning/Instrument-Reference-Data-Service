@@ -142,6 +142,40 @@ curl -X GET "http://localhost:5105/api/instruments?cusip=000000001" \
 
 ---
 
+#### Contract Lookup Endpoints
+
+The API contract includes dedicated lookup routes:
+
+- `GET /api/instruments/lookup?isin={isin}`
+- `GET /api/instruments/lookup?cusip={cusip}`
+
+Current implementation behavior:
+
+- `GET /api/instruments?isin={isin}`
+- `GET /api/instruments?cusip={cusip}`
+
+Equivalent request examples:
+
+```bash
+# Contract-style lookup by ISIN
+curl -X GET "http://localhost:5105/api/instruments/lookup?isin=US0000000001" \
+  -H "Accept: application/json"
+
+# Contract-style lookup by CUSIP
+curl -X GET "http://localhost:5105/api/instruments/lookup?cusip=000000001" \
+  -H "Accept: application/json"
+
+# Current implementation lookup by ISIN
+curl -X GET "http://localhost:5105/api/instruments?isin=US0000000001" \
+  -H "Accept: application/json"
+
+# Current implementation lookup by CUSIP
+curl -X GET "http://localhost:5105/api/instruments?cusip=000000001" \
+  -H "Accept: application/json"
+```
+
+---
+
 #### 2. Get Instrument by ID
 Retrieve a specific instrument by its ID.
 
@@ -248,7 +282,69 @@ curl -X POST "http://localhost:5105/api/instruments" \
 
 ---
 
-#### 4. Delete Instrument
+#### 4. Update Instrument
+Update mutable instrument fields.
+
+**Request:**
+```bash
+curl -X PUT "http://localhost:5105/api/instruments/INS-20260811131902-0001" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Apple Inc. Updated Stock",
+    "assetClassId": "EQ",
+    "sectorId": 1,
+    "exchangeId": 1,
+    "currencyId": 1,
+    "issuerId": 1,
+    "status": "Active",
+    "effectiveDate": "2026-08-17"
+  }'
+```
+
+**Response (204 No Content):**
+```
+(empty body)
+```
+
+**Response (404 Not Found):**
+```
+(empty body)
+```
+
+---
+
+#### 5. Get Instrument Audit History
+Retrieve full change history for a specific instrument.
+
+**Request:**
+```bash
+curl -X GET "http://localhost:5105/api/instruments/INS-20260811131902-0001/audit" \
+  -H "Accept: application/json"
+```
+
+**Response (200 OK):**
+```json
+[
+  {
+    "auditId": "AUD-001",
+    "changedAt": "2026-08-11T10:00:00Z",
+    "changedBy": "system.seed",
+    "fieldName": "status",
+    "oldValue": "Pending",
+    "newValue": "Active",
+    "changeSource": "MockGenerator"
+  }
+]
+```
+
+**Response (404 Not Found):**
+```
+(empty body)
+```
+
+---
+
+#### 6. Delete Instrument
 Remove an instrument (cascades to identifiers and audits).
 
 **Request:**
@@ -268,7 +364,7 @@ curl -X DELETE "http://localhost:5105/api/instruments/INS-20260811131902-0001"
 
 ---
 
-#### 5. Get Quality Report
+#### 7. Get Quality Report
 Retrieve instruments that fail data quality checks.
 
 **Request:**
@@ -300,6 +396,26 @@ curl -X GET "http://localhost:5105/api/instruments/quality-report" \
     ]
   }
 ]
+```
+
+---
+
+### Health / Readiness
+
+#### Health Check Endpoint
+
+**Endpoint:** `GET /health`
+
+Use this endpoint to verify service readiness.
+
+**Request:**
+```bash
+curl -X GET "http://localhost:5105/health"
+```
+
+**Response (200 OK):**
+```
+Healthy
 ```
 
 ---
