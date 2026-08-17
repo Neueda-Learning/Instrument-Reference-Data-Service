@@ -11,7 +11,7 @@ namespace InstrumentReferenceDataService.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public sealed class InstrumentsController : ControllerBase
+public sealed partial class InstrumentsController : ControllerBase
 {
     private static readonly Regex IsinFormatRegex = new("^[A-Z]{2}[A-Z0-9]{9}[0-9]$", RegexOptions.Compiled);
     private static readonly InstrumentQualityIndicatorResponse StatusMissingIndicator = new(
