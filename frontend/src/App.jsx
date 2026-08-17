@@ -8,6 +8,51 @@ import PaginationControls from './components/PaginationControls'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
+function pickIdentifierValue(identifiers, typeId) {
+  if (!Array.isArray(identifiers)) {
+    return ''
+  }
+
+  const match = identifiers.find(
+    (item) => item?.identifierTypeId?.toUpperCase() === typeId,
+  )
+
+  return String(match?.identifierValue ?? '')
+}
+
+function sortInstrumentRows(items, sortBy, sortDirection) {
+  const direction = sortDirection === 'desc' ? -1 : 1
+
+  return [...items].sort((left, right) => {
+    const leftInstrument = left.instrument ?? {}
+    const rightInstrument = right.instrument ?? {}
+
+    let leftValue
+    let rightValue
+
+    if (sortBy === 'name') {
+      leftValue = String(leftInstrument.name ?? '').toUpperCase()
+      rightValue = String(rightInstrument.name ?? '').toUpperCase()
+    } else if (sortBy === 'lastUpdated') {
+      leftValue = String(leftInstrument.lastUpdated ?? '')
+      rightValue = String(rightInstrument.lastUpdated ?? '')
+    } else {
+      leftValue = String(leftInstrument.instrumentId ?? '').toUpperCase()
+      rightValue = String(rightInstrument.instrumentId ?? '').toUpperCase()
+    }
+
+    if (leftValue < rightValue) {
+      return -1 * direction
+    }
+
+    if (leftValue > rightValue) {
+      return 1 * direction
+    }
+
+    return 0
+  })
+}
+
 function App() {
   const [currentPage, setCurrentPage] = useState('home')
   const [isin, setIsin] = useState('')
@@ -37,13 +82,42 @@ function App() {
     setHomeError('')
 
     try {
+      const hasIdentifierSearch = Boolean(appliedFilters.isin || appliedFilters.cusip)
+
+      if (hasIdentifierSearch) {
+        const response = await fetch(`${API_BASE_URL}/api/instruments`)
+        if (!response.ok) {
+          throw new Error(`Request failed with status ${response.status}`)
+        }
+
+        const allItemsPayload = await response.json()
+        const allItems = Array.isArray(allItemsPayload) ? allItemsPayload : []
+
+        const filteredItems = allItems.filter((item) => {
+          const isinValue = pickIdentifierValue(item.identifiers, 'ISIN').toUpperCase()
+          const cusipValue = pickIdentifierValue(item.identifiers, 'CUSIP').toUpperCase()
+
+          const isinMatches = !appliedFilters.isin || isinValue.includes(appliedFilters.isin)
+          const cusipMatches = !appliedFilters.cusip || cusipValue.includes(appliedFilters.cusip)
+
+          return isinMatches && cusipMatches
+        })
+
+        const sortedItems = sortInstrumentRows(filteredItems, sortBy, sortDirection)
+        const startIndex = (homePage - 1) * homePageSize
+        const pagedItems = sortedItems.slice(startIndex, startIndex + homePageSize)
+
+        setRows(pagedItems)
+        setHomeTotalCount(sortedItems.length)
+
+        if (pagedItems.length === 0) {
+          setSelectedInstrumentId('')
+        }
+
+        return
+      }
+
       const query = new URLSearchParams()
-      if (appliedFilters.isin) {
-        query.set('isin', appliedFilters.isin)
-      }
-      if (appliedFilters.cusip) {
-        query.set('cusip', appliedFilters.cusip)
-      }
 
       query.set('pageNumber', String(homePage))
       query.set('pageSize', String(homePageSize))
@@ -83,20 +157,16 @@ function App() {
     loadHomeInstruments()
   }, [loadHomeInstruments])
 
-  const handleSearch = async (event) => {
-    event.preventDefault()
-    const nextFilters = {
+  useEffect(() => {
+    setAppliedFilters({
       isin: isin.trim().toUpperCase(),
       cusip: cusip.trim().toUpperCase(),
-    }
-
-    setAppliedFilters(nextFilters)
-    setMonitorQuickFilter({
-      type: 'all',
-      staleAfterDays: 30,
-      recentWithinDays: 7,
     })
     setHomePage(1)
+  }, [isin, cusip])
+
+  const handleSearch = async (event) => {
+    event.preventDefault()
   }
 
   const handleReset = async () => {
