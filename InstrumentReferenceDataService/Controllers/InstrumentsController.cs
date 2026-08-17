@@ -98,6 +98,211 @@ public sealed partial class InstrumentsController : ControllerBase
         return Ok(instruments);
     }
 
+    [HttpGet("paged")]
+    public async Task<ActionResult<PagedResultResponse<InstrumentDetailResponse>>> GetPaged(
+        [FromQuery] string? isin,
+        [FromQuery] string? cusip,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 15,
+        [FromQuery] string? sortBy = "instrumentId",
+        [FromQuery] string? sortDirection = "asc",
+        [FromQuery] string? freshnessFilter = null,
+        [FromQuery] int staleAfterDays = 30,
+        [FromQuery] int recentWithinDays = 7,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedPageNumber = Math.Max(1, pageNumber);
+        var normalizedPageSize = Math.Clamp(pageSize, 1, 200);
+        var normalizedStaleAfterDays = Math.Max(1, staleAfterDays);
+        var normalizedRecentWithinDays = Math.Max(1, recentWithinDays);
+
+        logger.LogInformation(
+            "Paged query for instruments with ISIN {ISIN}, CUSIP {CUSIP}, page {PageNumber}, size {PageSize}, sort {SortBy} {SortDirection}, freshness {FreshnessFilter}",
+            isin,
+            cusip,
+            normalizedPageNumber,
+            normalizedPageSize,
+            sortBy,
+            sortDirection,
+            freshnessFilter);
+
+        var query = ApplyIdentifierFilters(dbContext.Instruments.AsNoTracking(), isin, cusip);
+
+        var normalizedSortBy = (sortBy ?? "instrumentId").Trim().ToLowerInvariant();
+        var descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+
+        IOrderedQueryable<Instrument> orderedQuery;
+        orderedQuery = normalizedSortBy switch
+        {
+            "name" => descending ? query.OrderByDescending(item => item.Name).ThenBy(item => item.InstrumentId) : query.OrderBy(item => item.Name).ThenBy(item => item.InstrumentId),
+            "lastupdated" => descending ? query.OrderByDescending(item => item.LastUpdated).ThenBy(item => item.InstrumentId) : query.OrderBy(item => item.LastUpdated).ThenBy(item => item.InstrumentId),
+            _ => descending ? query.OrderByDescending(item => item.InstrumentId) : query.OrderBy(item => item.InstrumentId)
+        };
+
+        List<string> instrumentIds;
+        int totalCount;
+
+        if (!string.IsNullOrWhiteSpace(freshnessFilter))
+        {
+            var normalizedFilter = freshnessFilter.Trim().ToLowerInvariant();
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+            var sortedCandidates = await orderedQuery
+                .Select(item => new
+                {
+                    item.InstrumentId,
+                    item.LastUpdated
+                })
+                .ToListAsync(cancellationToken);
+
+            var filteredCandidates = sortedCandidates
+                .Where(item =>
+                {
+                    var ageDays = today.DayNumber - item.LastUpdated.DayNumber;
+                    return normalizedFilter switch
+                    {
+                        "stale" => ageDays > normalizedStaleAfterDays,
+                        "recent" => ageDays >= 0 && ageDays <= normalizedRecentWithinDays,
+                        _ => true
+                    };
+                })
+                .ToList();
+
+            totalCount = filteredCandidates.Count;
+            instrumentIds = filteredCandidates
+                .Skip((normalizedPageNumber - 1) * normalizedPageSize)
+                .Take(normalizedPageSize)
+                .Select(item => item.InstrumentId)
+                .ToList();
+        }
+        else
+        {
+            totalCount = await orderedQuery.CountAsync(cancellationToken);
+            instrumentIds = await orderedQuery
+                .Skip((normalizedPageNumber - 1) * normalizedPageSize)
+                .Take(normalizedPageSize)
+                .Select(item => item.InstrumentId)
+                .ToListAsync(cancellationToken);
+        }
+
+        var items = new List<InstrumentDetailResponse>(instrumentIds.Count);
+        foreach (var instrumentId in instrumentIds)
+        {
+            var instrument = await BuildInstrumentDetailAsync(instrumentId, cancellationToken);
+            if (instrument is not null)
+            {
+                items.Add(instrument);
+            }
+        }
+
+        var response = new PagedResultResponse<InstrumentDetailResponse>(
+            items,
+            totalCount,
+            normalizedPageNumber,
+            normalizedPageSize);
+
+        return Ok(response);
+    }
+
+    [HttpGet("monitoring")]
+    public async Task<ActionResult<MonitoringDataResponse>> GetMonitoring(
+        [FromQuery] int staleAfterDays = 30,
+        [FromQuery] int recentWithinDays = 7,
+        [FromQuery] int pageSize = 8,
+        [FromQuery] int stalePageNumber = 1,
+        [FromQuery] int recentPageNumber = 1,
+        [FromQuery] int anomalyPageNumber = 1,
+        [FromQuery] string? isin = null,
+        [FromQuery] string? cusip = null,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStaleAfterDays = Math.Max(1, staleAfterDays);
+        var normalizedRecentWithinDays = Math.Max(1, recentWithinDays);
+        var normalizedPageSize = Math.Clamp(pageSize, 1, 200);
+        var normalizedStalePage = Math.Max(1, stalePageNumber);
+        var normalizedRecentPage = Math.Max(1, recentPageNumber);
+        var normalizedAnomalyPage = Math.Max(1, anomalyPageNumber);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var query = ApplyIdentifierFilters(dbContext.Instruments.AsNoTracking(), isin, cusip);
+
+        var sourceItems = await query
+            .Select(item => new
+            {
+                item.InstrumentId,
+                item.Name,
+                item.LastUpdated
+            })
+            .ToListAsync(cancellationToken);
+
+        var staleItems = new List<MonitoringInstrumentItemResponse>();
+        var recentItems = new List<MonitoringInstrumentItemResponse>();
+        var anomalyItems = new List<MonitoringAnomalyItemResponse>();
+
+        foreach (var item in sourceItems)
+        {
+            var ageDays = today.DayNumber - item.LastUpdated.DayNumber;
+
+            if (ageDays < 0)
+            {
+                anomalyItems.Add(new MonitoringAnomalyItemResponse(
+                    item.InstrumentId,
+                    item.Name,
+                    item.LastUpdated,
+                    "Last Updated is in the future"));
+            }
+
+            if (ageDays > normalizedStaleAfterDays)
+            {
+                staleItems.Add(new MonitoringInstrumentItemResponse(
+                    item.InstrumentId,
+                    item.Name,
+                    item.LastUpdated,
+                    ageDays));
+            }
+
+            if (ageDays >= 0 && ageDays <= normalizedRecentWithinDays)
+            {
+                recentItems.Add(new MonitoringInstrumentItemResponse(
+                    item.InstrumentId,
+                    item.Name,
+                    item.LastUpdated,
+                    ageDays));
+            }
+        }
+
+        staleItems = staleItems
+            .OrderByDescending(item => item.AgeDays)
+            .ThenBy(item => item.InstrumentId)
+            .ToList();
+
+        recentItems = recentItems
+            .OrderBy(item => item.AgeDays)
+            .ThenBy(item => item.InstrumentId)
+            .ToList();
+
+        anomalyItems = anomalyItems
+            .OrderBy(item => item.InstrumentId)
+            .ToList();
+
+        var monitoredCount = staleItems.Count + recentItems.Count;
+        var freshnessScore = monitoredCount == 0
+            ? 100
+            : Math.Max(0, (int)Math.Round((double)(recentItems.Count * 100) / monitoredCount, MidpointRounding.AwayFromZero));
+
+        var stalePaged = BuildPagedResult(staleItems, normalizedStalePage, normalizedPageSize);
+        var recentPaged = BuildPagedResult(recentItems, normalizedRecentPage, normalizedPageSize);
+        var anomalyPaged = BuildPagedResult(anomalyItems, normalizedAnomalyPage, normalizedPageSize);
+
+        var response = new MonitoringDataResponse(
+            freshnessScore,
+            stalePaged,
+            recentPaged,
+            anomalyPaged);
+
+        return Ok(response);
+    }
+
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(string? id, CancellationToken cancellationToken)
     {
@@ -373,5 +578,42 @@ public sealed partial class InstrumentsController : ControllerBase
             .ToListAsync(cancellationToken);
 
         return new InstrumentDetailResponse(instrument, identifiers, audits);
+    }
+
+    private IQueryable<Instrument> ApplyIdentifierFilters(IQueryable<Instrument> query, string? isin, string? cusip)
+    {
+        if (!string.IsNullOrWhiteSpace(isin))
+        {
+            var normalizedIsin = isin.Trim().ToUpperInvariant();
+            query = query.Where(instrument => dbContext.InstrumentIdentifiers
+                .Any(identifier => identifier.InstrumentId == instrument.InstrumentId
+                    && identifier.IdentifierTypeId == "ISIN"
+                    && identifier.IdentifierValue == normalizedIsin));
+        }
+
+        if (!string.IsNullOrWhiteSpace(cusip))
+        {
+            var normalizedCusip = cusip.Trim().ToUpperInvariant();
+            query = query.Where(instrument => dbContext.InstrumentIdentifiers
+                .Any(identifier => identifier.InstrumentId == instrument.InstrumentId
+                    && identifier.IdentifierTypeId == "CUSIP"
+                    && identifier.IdentifierValue == normalizedCusip));
+        }
+
+        return query;
+    }
+
+    private static PagedResultResponse<T> BuildPagedResult<T>(IReadOnlyList<T> source, int pageNumber, int pageSize)
+    {
+        var normalizedPageNumber = Math.Max(1, pageNumber);
+        var normalizedPageSize = Math.Clamp(pageSize, 1, 200);
+        var totalCount = source.Count;
+
+        var items = source
+            .Skip((normalizedPageNumber - 1) * normalizedPageSize)
+            .Take(normalizedPageSize)
+            .ToList();
+
+        return new PagedResultResponse<T>(items, totalCount, normalizedPageNumber, normalizedPageSize);
     }
 }
