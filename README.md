@@ -54,40 +54,325 @@ cd InstrumentReferenceDataService.Tests
 
 dotnet test
 ```
-The API will be available at `https://localhost:5105`.  
-The OpenAPI spec is served at `https://localhost:5105/openapi/v1.json`.
+The API will be available at `http://localhost:5105`.  
+The OpenAPI/Swagger spec is available at `http://localhost:5105/swagger/ui` (when built in Debug mode).
 
-## Mock Data
+## API Documentation
 
-### Generate data
+### Base URL
+```
+http://localhost:5105/api
+```
+
+### Endpoints
+
+#### 1. Get All Instruments
+Retrieve all instruments or filter by identifier (ISIN, CUSIP).
+
+**Request:**
+```bash
+# Get all instruments
+curl -X GET "http://localhost:5105/api/instruments" \
+  -H "Accept: application/json"
+
+# Filter by ISIN
+curl -X GET "http://localhost:5105/api/instruments?isin=US0000000001" \
+  -H "Accept: application/json"
+
+# Filter by CUSIP
+curl -X GET "http://localhost:5105/api/instruments?cusip=000000001" \
+  -H "Accept: application/json"
+```
+
+**Response (200 OK):**
+```json
+[
+  {
+    "instrument": {
+      "instrumentId": "INS-20260811131902-0001",
+      "name": "Apple Inc. Stock",
+      "primaryIsin": "US0000000001",
+      "assetClassId": "EQ",
+      "assetClassName": "Equity",
+      "sectorId": 1,
+      "sectorName": "Technology",
+      "exchangeId": 1,
+      "exchangeMicCode": "XNYS",
+      "exchangeName": "New York Stock Exchange",
+      "currencyId": 1,
+      "currencyName": "USD",
+      "issuerId": 1,
+      "issuerName": "Apple Inc.",
+      "status": "Active",
+      "effectiveDate": "2026-08-11",
+      "lastUpdated": "2026-08-11"
+    },
+    "identifiers": [
+      {
+        "identifierId": "ID-001",
+        "identifierTypeId": "ISIN",
+        "identifierTypeName": "International Securities Identification Number",
+        "identifierValue": "US0000000001",
+        "effectiveDate": "2026-08-11",
+        "expiryDate": null
+      },
+      {
+        "identifierId": "ID-002",
+        "identifierTypeId": "CUSIP",
+        "identifierTypeName": "Committee on Uniform Security Identification Procedures",
+        "identifierValue": "000000001",
+        "effectiveDate": "2026-08-11",
+        "expiryDate": null
+      }
+    ],
+    "audits": [
+      {
+        "auditId": "AUD-001",
+        "changedAt": "2026-08-11T10:00:00Z",
+        "changedBy": "system.seed",
+        "fieldName": "status",
+        "oldValue": null,
+        "newValue": "Active",
+        "changeSource": "MockGenerator"
+      }
+    ]
+  }
+]
+```
+
+---
+
+#### 2. Get Instrument by ID
+Retrieve a specific instrument by its ID.
+
+**Request:**
+```bash
+curl -X GET "http://localhost:5105/api/instruments/INS-20260811131902-0001" \
+  -H "Accept: application/json"
+```
+
+**Response (200 OK):**
+```json
+{
+  "instrument": {
+    "instrumentId": "INS-20260811131902-0001",
+    "name": "Apple Inc. Stock",
+    "primaryIsin": "US0000000001",
+    "assetClassId": "EQ",
+    "assetClassName": "Equity",
+    "sectorId": 1,
+    "sectorName": "Technology",
+    "exchangeId": 1,
+    "exchangeMicCode": "XNYS",
+    "exchangeName": "New York Stock Exchange",
+    "currencyId": 1,
+    "currencyName": "USD",
+    "issuerId": 1,
+    "issuerName": "Apple Inc.",
+    "status": "Active",
+    "effectiveDate": "2026-08-11",
+    "lastUpdated": "2026-08-11"
+  },
+  "identifiers": [...],
+  "audits": [...]
+}
+```
+
+**Response (404 Not Found):**
+```json
+null
+```
+
+---
+
+#### 3. Create Instrument
+Create a new instrument with validation.
+
+**Request:**
+```bash
+curl -X POST "http://localhost:5105/api/instruments" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "instrumentId": "INS-20260817-0002",
+    "name": "Microsoft Corporation Stock",
+    "primaryIsin": "US5949181045",
+    "assetClassId": "EQ",
+    "sectorId": 1,
+    "exchangeId": 1,
+    "currencyId": 1,
+    "issuerId": 2,
+    "status": "Active",
+    "effectiveDate": "2026-08-17"
+  }'
+```
+
+**Response (201 Created):**
+```json
+{
+  "instrumentId": "INS-20260817-0002",
+  "name": "Microsoft Corporation Stock",
+  "primaryIsin": "US5949181045",
+  "assetClassId": "EQ",
+  "assetClassName": "Equity",
+  "sectorId": 1,
+  "sectorName": "Technology",
+  "exchangeId": 1,
+  "exchangeMicCode": "XNYS",
+  "exchangeName": "New York Stock Exchange",
+  "currencyId": 1,
+  "currencyName": "USD",
+  "issuerId": 2,
+  "issuerName": "Microsoft Inc.",
+  "status": "Active",
+  "effectiveDate": "2026-08-17",
+  "lastUpdated": "2026-08-17"
+}
+```
+
+**Response (400 Bad Request):**
+```json
+{
+  "errors": {
+    "PrimaryIsin": ["'Primary Isin' must be exactly 12 characters in length."],
+    "InstrumentId": ["The InstrumentId field is required."]
+  }
+}
+```
+
+**Response (409 Conflict):**
+```json
+{
+  "message": "An instrument with the same ISIN already exists."
+}
+```
+
+---
+
+#### 4. Delete Instrument
+Remove an instrument (cascades to identifiers and audits).
+
+**Request:**
+```bash
+curl -X DELETE "http://localhost:5105/api/instruments/INS-20260811131902-0001"
+```
+
+**Response (204 No Content):**
+```
+(empty body)
+```
+
+**Response (404 Not Found):**
+```
+(empty body)
+```
+
+---
+
+#### 5. Get Quality Report
+Retrieve instruments that fail data quality checks.
+
+**Request:**
+```bash
+curl -X GET "http://localhost:5105/api/instruments/quality-report" \
+  -H "Accept: application/json"
+```
+
+**Response (200 OK):**
+```json
+[
+  {
+    "instrumentId": "INS-20260811131902-0001",
+    "name": "Apple Inc. Stock",
+    "primaryIsin": "INVALID123",
+    "failingIndicators": [
+      {
+        "code": "PRIMARY_ISIN_FORMAT_INVALID",
+        "description": "Primary ISIN does not match the expected 12-character ISIN format."
+      },
+      {
+        "code": "STATUS_MISSING",
+        "description": "Instrument status is null, empty, or whitespace."
+      },
+      {
+        "code": "EFFECTIVE_DATE_AFTER_LAST_UPDATED",
+        "description": "EffectiveDate is later than LastUpdated."
+      }
+    ]
+  }
+]
+```
+
+---
+
+### Mock Data
+
+#### Generate Mock Data
 
 **Endpoint:** `POST /api/mock-data/generate`
 
-This API endpoint allows you to generate mock instrument data and populate the database. It's useful for testing and development purposes.
+Generate test instruments and populate the database.
 
--   **`count` (optional, integer):** Specifies the number of instruments to generate. Defaults to 50 if not provided.
--   **`seed` (optional, integer):** Provides a seed for the random data generation, making the generated data deterministic if the same seed is used.
+**Parameters:**
+- `count` (optional, integer): Number of instruments to generate. Default: 50
+- `seed` (optional, integer): Random seed for deterministic generation
 
-**Example Usage:**
-
-To generate 50 instruments:
+**Request:**
 ```bash
-curl.exe -X POST http://localhost:5105/api/mock-data/generate
+# Generate 50 instruments with default settings
+curl -X POST "http://localhost:5105/api/mock-data/generate"
+
+# Generate 20 instruments with seed 123
+curl -X POST "http://localhost:5105/api/mock-data/generate?count=20&seed=123"
+
+# Generate 100 instruments
+curl -X POST "http://localhost:5105/api/mock-data/generate?count=100"
 ```
 
-To generate 20 instruments with a specific seed:
-```bash
-curl.exe -X POST "http://localhost:5105/api/mock-data/generate?count=20&seed=123"
+**Response (200 OK):**
+```json
+{
+  "message": "Generated 20 instruments successfully"
+}
 ```
 
-### Retrieve instruments
+---
 
+## HTTP Status Codes
+
+| Status | Meaning |
+|--------|---------|
+| 200 | Success |
+| 201 | Created |
+| 204 | No Content (successful delete) |
+| 400 | Bad Request (validation error) |
+| 404 | Not Found |
+| 409 | Conflict (duplicate ISIN) |
+| 500 | Internal Server Error |
+
+---
+
+## Build & Run
+
+### Build the project
 ```bash
-curl "http://localhost:5105/api/instruments"
+cd InstrumentReferenceDataService
+dotnet build
 ```
-### Look up instrument by ISIN
 
+### Run in Development
 ```bash
-curl.exe  /api/instruments/lookup?isin={isin}
+dotnet run
+```
+
+### Run Tests
+```bash
+cd ../InstrumentReferenceDataService.Tests
+dotnet test
+```
+
+### Run with Release Configuration
+```bash
+cd InstrumentReferenceDataService
+dotnet run --configuration Release
 ```
 
