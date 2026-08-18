@@ -1,6 +1,5 @@
-using InstrumentReferenceDataService.Models;
+using InstrumentReferenceDataService.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace InstrumentReferenceDataService.Controllers;
 
@@ -9,104 +8,28 @@ public sealed partial class InstrumentsController
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateInstrument(string id, [FromBody] UpdateInstrumentRequest request, CancellationToken cancellationToken)
     {
-        var instrument = await dbContext.Instruments
-            .SingleOrDefaultAsync(item => item.InstrumentId == id, cancellationToken);
+        var command = new UpdateInstrumentCommand(
+            request.Name,
+            request.AssetClassId,
+            request.SectorId,
+            request.ExchangeId,
+            request.CurrencyId,
+            request.IssuerId,
+            request.Status,
+            request.EffectiveDate);
 
-        if (instrument is null)
+        var result = await commandService.UpdateAsync(id, command, cancellationToken);
+        if (result.Status == UpdateInstrumentStatus.NotFound)
         {
             return NotFound();
         }
 
-        // Verify that all required foreign keys exist
-        var assetClassExists = await dbContext.AssetClasses
-            .AnyAsync(ac => ac.AssetClassId == request.AssetClassId, cancellationToken);
-
-        if (!assetClassExists)
+        if (result.Status == UpdateInstrumentStatus.BadRequest)
         {
-            return BadRequest($"AssetClass '{request.AssetClassId}' does not exist");
+            return BadRequest(result.ErrorMessage);
         }
 
-        var sectorExists = await dbContext.Sectors
-            .AnyAsync(s => s.SectorId == request.SectorId, cancellationToken);
-
-        if (!sectorExists)
-        {
-            return BadRequest($"Sector with ID {request.SectorId} does not exist");
-        }
-
-        var exchangeExists = await dbContext.Exchanges
-            .AnyAsync(e => e.ExchangeId == request.ExchangeId, cancellationToken);
-
-        if (!exchangeExists)
-        {
-            return BadRequest($"Exchange with ID {request.ExchangeId} does not exist");
-        }
-
-        var currencyExists = await dbContext.Currencies
-            .AnyAsync(c => c.CurrencyId == request.CurrencyId, cancellationToken);
-
-        if (!currencyExists)
-        {
-            return BadRequest($"Currency with ID {request.CurrencyId} does not exist");
-        }
-
-        var issuerExists = await dbContext.Issuers
-            .AnyAsync(i => i.IssuerId == request.IssuerId, cancellationToken);
-
-        if (!issuerExists)
-        {
-            return BadRequest($"Issuer with ID {request.IssuerId} does not exist");
-        }
-
-        var changedAt = DateTime.UtcNow;
-        var hasBusinessChanges = false;
-
-        hasBusinessChanges |= ApplyChange("name", instrument.Name, request.Name, value => instrument.Name = value, id, changedAt);
-        hasBusinessChanges |= ApplyChange("asset_class_id", instrument.AssetClassId, request.AssetClassId, value => instrument.AssetClassId = value, id, changedAt);
-        hasBusinessChanges |= ApplyChange("sector_id", instrument.SectorId.ToString(), request.SectorId.ToString(), value => instrument.SectorId = int.Parse(value), id, changedAt);
-        hasBusinessChanges |= ApplyChange("exchange_id", instrument.ExchangeId.ToString(), request.ExchangeId.ToString(), value => instrument.ExchangeId = int.Parse(value), id, changedAt);
-        hasBusinessChanges |= ApplyChange("currency_id", instrument.CurrencyId.ToString(), request.CurrencyId.ToString(), value => instrument.CurrencyId = int.Parse(value), id, changedAt);
-        hasBusinessChanges |= ApplyChange("issuer_id", instrument.IssuerId.ToString(), request.IssuerId.ToString(), value => instrument.IssuerId = int.Parse(value), id, changedAt);
-        hasBusinessChanges |= ApplyChange("status", instrument.Status, request.Status, value => instrument.Status = value, id, changedAt);
-        hasBusinessChanges |= ApplyChange("effective_date", instrument.EffectiveDate.ToString("yyyy-MM-dd"), request.EffectiveDate.ToString("yyyy-MM-dd"), value => instrument.EffectiveDate = DateOnly.Parse(value), id, changedAt);
-
-        if (hasBusinessChanges)
-        {
-            instrument.LastUpdated = DateOnly.FromDateTime(changedAt);
-        }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
-    }
-
-    private bool ApplyChange(
-        string fieldName,
-        string oldValue,
-        string newValue,
-        Action<string> apply,
-        string instrumentId,
-        DateTime changedAt)
-    {
-        if (string.Equals(oldValue, newValue, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        apply(newValue);
-
-        dbContext.InstrumentAudits.Add(new InstrumentAudit
-        {
-            AuditId = $"AUD-{Guid.NewGuid():N}",
-            InstrumentId = instrumentId,
-            ChangedAt = changedAt,
-            ChangedBy = "system.api",
-            FieldName = fieldName,
-            OldValue = oldValue,
-            NewValue = newValue,
-            ChangeSource = "PUT /api/instruments/{id}"
-        });
-
-        return true;
     }
 }
 
