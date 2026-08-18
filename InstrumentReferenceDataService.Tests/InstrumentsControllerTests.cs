@@ -412,6 +412,29 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GetEditOptions_ReturnsReferenceOptionsAndStatuses()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await SeedAsync(factory.Services);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/instruments/options");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var payload = await response.Content.ReadFromJsonAsync<InstrumentEditOptionsResponse>();
+        Assert.NotNull(payload);
+
+        Assert.Contains(payload.AssetClasses, item => item.AssetClassId == "EQ");
+        Assert.Contains(payload.Sectors, item => item.SectorId == 1);
+        Assert.Contains(payload.Exchanges, item => item.ExchangeId == 1);
+        Assert.Contains(payload.Currencies, item => item.CurrencyId == 1);
+        Assert.Contains(payload.Issuers, item => item.IssuerId == 1);
+        Assert.Contains(payload.Statuses, item => string.Equals(item.Value, "Active", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(payload.Statuses, item => string.Equals(item.Value, "Pending", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task GetInstrumentById_WhenInstrumentExists_ReturnsInstrument()
     {
         using var factory = new TestWebApplicationFactory();

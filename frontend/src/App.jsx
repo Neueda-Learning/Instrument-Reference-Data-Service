@@ -5,6 +5,7 @@ import InstrumentsTable from './components/InstrumentsTable'
 import InstrumentMetadataPanel from './components/InstrumentMetadataPanel'
 import DataFreshnessView from './components/DataFreshnessView'
 import PaginationControls from './components/PaginationControls'
+import EditInstrumentForm from './components/EditInstrumentForm'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -69,6 +70,16 @@ function App() {
   const [selectedInstrumentDetail, setSelectedInstrumentDetail] = useState(null)
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false)
   const [metadataError, setMetadataError] = useState('')
+  const [editInstrumentId, setEditInstrumentId] = useState('')
+  const [editInstrumentDetail, setEditInstrumentDetail] = useState(null)
+  const [editOptions, setEditOptions] = useState(null)
+  const [isLoadingEdit, setIsLoadingEdit] = useState(false)
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
+  const [editError, setEditError] = useState('')
+  const [editSubmitError, setEditSubmitError] = useState('')
+  const [editSuccess, setEditSuccess] = useState('')
+  const [isEditSuccessPopupOpen, setIsEditSuccessPopupOpen] = useState(false)
+  const [editSuccessPopupMessage, setEditSuccessPopupMessage] = useState('')
   const [homePage, setHomePage] = useState(1)
   const [homePageSize, setHomePageSize] = useState(15)
   const [monitorQuickFilter, setMonitorQuickFilter] = useState({
@@ -258,6 +269,92 @@ function App() {
     setIsMetadataModalOpen(false)
   }
 
+  const loadEditContext = useCallback(async (instrumentId) => {
+    setIsLoadingEdit(true)
+    setEditError('')
+    setEditSubmitError('')
+    setEditSuccess('')
+
+    try {
+      const [detailResponse, optionsResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/instruments/${instrumentId}`),
+        fetch(`${API_BASE_URL}/api/instruments/options`),
+      ])
+
+      if (!detailResponse.ok || !optionsResponse.ok) {
+        throw new Error('Unable to load edit data')
+      }
+
+      const [detailPayload, optionsPayload] = await Promise.all([
+        detailResponse.json(),
+        optionsResponse.json(),
+      ])
+
+      setEditInstrumentDetail(detailPayload)
+      setEditOptions(optionsPayload)
+      setEditInstrumentId(instrumentId)
+    } catch {
+      setEditInstrumentDetail(null)
+      setEditOptions(null)
+      setEditError('Unable to load editable instrument data and option lists.')
+    } finally {
+      setIsLoadingEdit(false)
+    }
+  }, [])
+
+  const handleOpenEditPage = useCallback(async (instrumentId) => {
+    setIsMetadataModalOpen(false)
+    setCurrentPage('edit')
+    await loadEditContext(instrumentId)
+  }, [loadEditContext])
+
+  const handleSaveEdit = async (payload) => {
+    if (!editInstrumentId) {
+      return
+    }
+
+    setEditError('')
+    setEditSubmitError('')
+    setEditSuccess('')
+    setIsSavingEdit(true)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/instruments/${editInstrumentId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Update failed with status ${response.status}`)
+      }
+
+      await loadEditContext(editInstrumentId)
+      await loadHomeInstruments()
+      setEditSuccessPopupMessage('Instrument edit was successful.')
+      setIsEditSuccessPopupOpen(true)
+      setCurrentPage('home')
+    } catch {
+      setEditSubmitError('Unable to update instrument. Please review your selections and try again.')
+    } finally {
+      setIsSavingEdit(false)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setCurrentPage('home')
+    setEditError('')
+    setEditSubmitError('')
+    setEditSuccess('')
+  }
+
+  const handleCloseEditSuccessPopup = () => {
+    setIsEditSuccessPopupOpen(false)
+    setEditSuccessPopupMessage('')
+  }
+
   const handleDeleteInstrument = async () => {
     if (!selectedInstrumentDetail) return
     const { instrumentId, name } = selectedInstrumentDetail.instrument
@@ -303,6 +400,7 @@ function App() {
   const isQuickFilterActive = monitorQuickFilter.type !== 'all'
   const isHomePage = currentPage === 'home'
   const isMonitoringPage = currentPage === 'monitoring'
+  const isEditPage = currentPage === 'edit'
 
   return (
     <div className="page-shell">
@@ -322,6 +420,11 @@ function App() {
           >
             Monitoring
           </button>
+          {isEditPage ? (
+            <button type="button" className="top-nav-link active">
+              Edit Instrument
+            </button>
+          ) : null}
         </div>
 
         <div className="top-nav-brand">
@@ -433,6 +536,33 @@ function App() {
         </>
       ) : null}
 
+      {isEditPage ? (
+        <>
+          <header className="hero-panel">
+            <p className="eyebrow">Edit Workflow</p>
+            <h1>Edit Instrument</h1>
+            <p className="hero-copy">
+              Name can be edited directly. Asset class, sector, exchange, currency, issuer,
+              and status can only be selected from backend-defined lists.
+            </p>
+          </header>
+
+          {isLoadingEdit ? <p className="status-message">Loading edit form...</p> : null}
+          {!isLoadingEdit && editError ? <p className="status-message error">{editError}</p> : null}
+          {!isLoadingEdit && !editError && editInstrumentDetail && editOptions ? (
+            <EditInstrumentForm
+              detail={editInstrumentDetail}
+              options={editOptions}
+              isSaving={isSavingEdit}
+              error={editSubmitError}
+              success={editSuccess}
+              onSubmit={handleSaveEdit}
+              onCancel={handleCancelEdit}
+            />
+          ) : null}
+        </>
+      ) : null}
+
       {isMetadataModalOpen ? (
         <div
           className="metadata-modal-overlay"
@@ -462,18 +592,65 @@ function App() {
                 Close
               </button>
               {!isLoadingMetadata && !metadataError && selectedInstrumentDetail ? (
-                <button
-                  type="button"
-                  className="button button-danger"
-                  onClick={handleDeleteInstrument}
-                >
-                  Delete Instrument
-                </button>
+                <div className="metadata-action-group">
+                  <button
+                    type="button"
+                    className="button button-secondary"
+                    onClick={() => handleOpenEditPage(selectedInstrumentDetail.instrument.instrumentId)}
+                  >
+                    Edit Instrument
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-danger"
+                    onClick={handleDeleteInstrument}
+                  >
+                    Delete Instrument
+                  </button>
+                </div>
               ) : null}
             </div>
             {isLoadingMetadata ? <p className="status-message">Loading metadata...</p> : null}
             {!isLoadingMetadata && metadataError ? <p className="status-message error">{metadataError}</p> : null}
             {!isLoadingMetadata && !metadataError ? <InstrumentMetadataPanel row={selectedInstrumentDetail} /> : null}
+          </div>
+        </div>
+      ) : null}
+
+      {isEditSuccessPopupOpen ? (
+        <div
+          className="metadata-modal-overlay"
+          role="button"
+          tabIndex={0}
+          onClick={handleCloseEditSuccessPopup}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              handleCloseEditSuccessPopup()
+            }
+          }}
+        >
+          <div
+            className="metadata-modal-content"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Edit Success"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <section className="metadata-panel" aria-label="Edit Success Message">
+              <div className="metadata-header">
+                <h2>Edit Successful</h2>
+              </div>
+              <p className="status-message">{editSuccessPopupMessage || 'Instrument edit was successful.'}</p>
+              <div className="actions" style={{ marginTop: '0.8rem' }}>
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={handleCloseEditSuccessPopup}
+                >
+                  OK
+                </button>
+              </div>
+            </section>
           </div>
         </div>
       ) : null}
