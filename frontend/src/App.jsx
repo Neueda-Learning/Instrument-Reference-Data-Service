@@ -403,42 +403,73 @@ function App() {
   const isEditPage = currentPage === 'edit'
 
   return (
-    <div className="page-shell">
+    <div className="app-shell">
       <nav className="top-nav" aria-label="Primary">
-        <div className="top-nav-links">
-          <button
-            type="button"
-            className={`top-nav-link ${isHomePage ? 'active' : ''}`}
-            onClick={() => setCurrentPage('home')}
-          >
-            Home
-          </button>
-          <button
-            type="button"
-            className={`top-nav-link ${isMonitoringPage ? 'active' : ''}`}
-            onClick={() => setCurrentPage('monitoring')}
-          >
-            Monitoring
-          </button>
-          {isEditPage ? (
-            <button type="button" className="top-nav-link active">
-              Edit Instrument
-            </button>
-          ) : null}
-        </div>
+        <div className="nav-inner">
+          <div className="nav-left">
+            <div className="nav-brand" aria-label="IRDS Home">
+              <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+                <rect width="28" height="28" rx="7" fill="#2563eb"/>
+                <path d="M7 18.5L11 13.5L14.5 16.5L18.5 10.5L21.5 13.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx="7" cy="18.5" r="1.75" fill="white"/>
+                <circle cx="11" cy="13.5" r="1.75" fill="white"/>
+                <circle cx="14.5" cy="16.5" r="1.75" fill="white"/>
+                <circle cx="18.5" cy="10.5" r="1.75" fill="white"/>
+                <circle cx="21.5" cy="13.5" r="1.75" fill="white"/>
+              </svg>
+              <div className="nav-brand-text">
+                <span className="nav-brand-name">IRDS</span>
+                <span className="nav-brand-sub">Reference Data Workbench</span>
+              </div>
+            </div>
 
-        <div className="top-nav-brand">
-          <span className="top-nav-kicker">Instrument Reference Data Service</span>
-          <strong>Reference Data Workbench</strong>
+            <div className="nav-divider" aria-hidden="true" />
+
+            <div className="top-nav-links">
+              <button
+                type="button"
+                className={`top-nav-link ${isHomePage ? 'active' : ''}`}
+                onClick={() => setCurrentPage('home')}
+              >
+                Instruments
+              </button>
+              <button
+                type="button"
+                className={`top-nav-link ${isMonitoringPage ? 'active' : ''}`}
+                onClick={() => setCurrentPage('monitoring')}
+              >
+                Monitoring
+              </button>
+              {isEditPage ? (
+                <button type="button" className="top-nav-link active">
+                  Edit Instrument
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="nav-right">
+            <div className="api-status-badge" aria-label="API connected">
+              <span className="api-status-dot" aria-hidden="true" />
+              API Connected
+            </div>
+          </div>
         </div>
       </nav>
 
+      <main className="page-main">
+        <div className="page-container">
+
       {isHomePage ? (
         <>
-          <header className="hero-panel">
-            <p className="eyebrow">Instrument Reference Data Service</p>
-            <h1>Instrument Search & Reference Table</h1>
-            <p className="hero-copy">
+          <header className="page-header">
+            <p className="page-breadcrumb">
+              <span>IRDS</span>
+              <span className="page-breadcrumb-sep" aria-hidden="true">›</span>
+              <span className="page-breadcrumb-current">Instruments</span>
+            </p>
+            <h1 className="page-title">Instrument Search &amp; Reference Table</h1>
+            <p className="page-description">
               Search financial instruments by identifier and review the complete reference
               dataset in one fast, analyst-focused view.
             </p>
@@ -460,15 +491,25 @@ function App() {
             {isQuickFilterActive ? (
               <div className="quick-filter-banner">
                 <span>
-                  Main table filtered by freshness monitor: <strong>{monitorQuickFilter.type}</strong>
+                  Main table filtered by: <strong>{monitorQuickFilter.type}</strong>
                 </span>
                 <button
                   type="button"
-                  className="button button-secondary"
+                  className="button button-secondary button-sm"
                   onClick={() => handleApplyMonitorQuickFilter('all')}
                 >
-                  Show All Instruments
+                  Show All
                 </button>
+              </div>
+            ) : null}
+
+            {!homeError && homeTotalCount > 0 ? (
+              <div className="table-panel-header">
+                <span className="table-panel-title">Instruments</span>
+                <div className="table-panel-meta">
+                  <span className="count-badge">{homeTotalCount.toLocaleString()} records</span>
+                  <span className="sort-badge">Sorted by {sortBy} · {sortDirection === 'asc' ? '↑' : '↓'}</span>
+                </div>
               </div>
             ) : null}
 
@@ -516,11 +557,15 @@ function App() {
 
       {isMonitoringPage ? (
         <>
-          <header className="hero-panel">
-            <p className="eyebrow">Monitoring</p>
-            <h1>Stale & Recently Changed Instruments</h1>
-            <p className="hero-copy">
-              Monitor update freshness, surface outlier date behavior, and quickly jump to
+          <header className="page-header">
+            <p className="page-breadcrumb">
+              <span>IRDS</span>
+              <span className="page-breadcrumb-sep" aria-hidden="true">›</span>
+              <span className="page-breadcrumb-current">Monitoring</span>
+            </p>
+            <h1 className="page-title">Stale &amp; Recently Changed Instruments</h1>
+            <p className="page-description">
+              Monitor update freshness, surface outlier date behaviour, and quickly jump to
               affected records for deeper investigation.
             </p>
           </header>
@@ -538,10 +583,16 @@ function App() {
 
       {isEditPage ? (
         <>
-          <header className="hero-panel">
-            <p className="eyebrow">Edit Workflow</p>
-            <h1>Edit Instrument</h1>
-            <p className="hero-copy">
+          <header className="page-header">
+            <p className="page-breadcrumb">
+              <span>IRDS</span>
+              <span className="page-breadcrumb-sep" aria-hidden="true">›</span>
+              <span>Instruments</span>
+              <span className="page-breadcrumb-sep" aria-hidden="true">›</span>
+              <span className="page-breadcrumb-current">Edit Instrument</span>
+            </p>
+            <h1 className="page-title">Edit Instrument</h1>
+            <p className="page-description">
               Name can be edited directly. Asset class, sector, exchange, currency, issuer,
               and status can only be selected from backend-defined lists.
             </p>
@@ -562,6 +613,9 @@ function App() {
           ) : null}
         </>
       ) : null}
+
+        </div>
+      </main>
 
       {isMetadataModalOpen ? (
         <div
@@ -587,15 +641,17 @@ function App() {
                 type="button"
                 className="metadata-modal-close"
                 onClick={handleCloseMetadataModal}
-                aria-label="Close metadata modal"
+                aria-label="Close metadata panel"
               >
-                Close
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M2 2l10 10M12 2L2 12"/>
+                </svg>
               </button>
               {!isLoadingMetadata && !metadataError && selectedInstrumentDetail ? (
                 <div className="metadata-action-group">
                   <button
                     type="button"
-                    className="button button-secondary"
+                    className="button button-secondary button-sm"
                     onClick={() => handleOpenEditPage(selectedInstrumentDetail.instrument.instrumentId)}
                   >
                     Edit Instrument
@@ -638,17 +694,21 @@ function App() {
           >
             <section className="metadata-panel" aria-label="Edit Success Message">
               <div className="metadata-header">
-                <h2>Edit Successful</h2>
+                <div className="metadata-header-left">
+                  <h2 className="metadata-title">Edit Successful</h2>
+                </div>
               </div>
-              <p className="status-message">{editSuccessPopupMessage || 'Instrument edit was successful.'}</p>
-              <div className="actions" style={{ marginTop: '0.8rem' }}>
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={handleCloseEditSuccessPopup}
-                >
-                  OK
-                </button>
+              <div className="metadata-body">
+                <p className="status-message" style={{ margin: 0 }}>{editSuccessPopupMessage || 'Instrument edit was successful.'}</p>
+                <div className="actions" style={{ marginTop: '0.75rem' }}>
+                  <button
+                    type="button"
+                    className="button button-primary"
+                    onClick={handleCloseEditSuccessPopup}
+                  >
+                    Done
+                  </button>
+                </div>
               </div>
             </section>
           </div>
