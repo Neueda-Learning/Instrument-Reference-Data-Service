@@ -188,7 +188,7 @@ function DataFreshnessView({ filters, onOpenMetadata, activeQuickFilter, onApply
         <div className="freshness-stat freshness-stat-score">
           <span>Freshness Score</span>
           <strong>{monitoringData.freshnessScore}%</strong>
-          <small>Based on recent vs stale instruments</small>
+          <small>Higher is better — based on stale vs total</small>
         </div>
         <div className="freshness-stat">
           <span>Stale</span>

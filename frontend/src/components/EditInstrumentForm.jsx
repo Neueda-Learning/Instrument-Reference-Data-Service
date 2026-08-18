@@ -77,11 +77,12 @@ function EditInstrumentForm({
     <section className="table-panel" aria-label="Edit Instrument">
       <div className="edit-header-row">
         <div>
-          <p className="eyebrow">Edit Instrument</p>
-          <h2>{instrument.instrumentId}</h2>
+          <p className="eyebrow">Editing instrument</p>
+          <h2>{instrument.name}</h2>
+          <p style={{ marginTop: '0.125rem', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>{instrument.instrumentId}</p>
         </div>
-        <button type="button" className="button button-secondary" onClick={onCancel}>
-          Back to Home
+        <button type="button" className="button button-secondary button-sm" onClick={onCancel}>
+          ← Back
         </button>
       </div>
 
@@ -208,12 +209,15 @@ function EditInstrumentForm({
           <input id="edit-last-updated" value={formatDate(instrument.lastUpdated)} readOnly />
         </div>
 
-        {error ? <p className="status-message error">{error}</p> : null}
-        {success ? <p className="status-message">{success}</p> : null}
+        {error ? <p className="status-message error" style={{ margin: 0 }}>{error}</p> : null}
+        {success ? <p className="status-message" style={{ margin: 0 }}>{success}</p> : null}
 
         <div className="actions">
           <button type="submit" className="button button-primary" disabled={!isFormReady || isSaving}>
-            {isSaving ? 'Saving...' : 'Save Changes'}
+            {isSaving ? 'Saving…' : 'Save Changes'}
+          </button>
+          <button type="button" className="button button-secondary" onClick={onCancel}>
+            Cancel
           </button>
         </div>
       </form>
