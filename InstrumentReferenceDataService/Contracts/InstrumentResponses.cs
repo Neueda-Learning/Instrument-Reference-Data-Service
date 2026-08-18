@@ -77,6 +77,38 @@ public sealed record InstrumentQualityReportItemResponse(
     string PrimaryIsin,
     IReadOnlyCollection<InstrumentQualityIndicatorResponse> FailingIndicators);
 
+public sealed record AssetClassOptionResponse(
+    string AssetClassId,
+    string Name);
+
+public sealed record SectorOptionResponse(
+    int SectorId,
+    string Name);
+
+public sealed record ExchangeOptionResponse(
+    int ExchangeId,
+    string MicCode,
+    string Name);
+
+public sealed record CurrencyOptionResponse(
+    int CurrencyId,
+    string Name);
+
+public sealed record IssuerOptionResponse(
+    int IssuerId,
+    string Name);
+
+public sealed record StatusOptionResponse(
+    string Value);
+
+public sealed record InstrumentEditOptionsResponse(
+    IReadOnlyCollection<AssetClassOptionResponse> AssetClasses,
+    IReadOnlyCollection<SectorOptionResponse> Sectors,
+    IReadOnlyCollection<ExchangeOptionResponse> Exchanges,
+    IReadOnlyCollection<CurrencyOptionResponse> Currencies,
+    IReadOnlyCollection<IssuerOptionResponse> Issuers,
+    IReadOnlyCollection<StatusOptionResponse> Statuses);
+
 public sealed record CreateInstrumentRequest(
     [Required(AllowEmptyStrings = false)]
     [StringLength(40)]

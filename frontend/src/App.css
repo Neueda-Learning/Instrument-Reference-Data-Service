@@ -123,10 +123,26 @@
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
-.field-row input:focus-visible {
+.field-row select {
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  border-radius: 0.65rem;
+  padding: 0.62rem 0.72rem;
+  font: inherit;
+  color: var(--text-main);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.field-row input:focus-visible,
+.field-row select:focus-visible {
   outline: none;
   border-color: var(--focus-ring);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring), transparent 72%);
+}
+
+.field-row input[readonly] {
+  background: #f7f9ff;
+  color: var(--text-muted);
 }
 
 .actions {
@@ -447,6 +463,11 @@ tbody tr {
   pointer-events: auto;
 }
 
+.metadata-action-group {
+  display: inline-flex;
+  gap: 0.55rem;
+}
+
 .metadata-modal-close {
   position: static;
   border: 1px solid var(--panel-border);
@@ -462,6 +483,30 @@ tbody tr {
 .metadata-modal-close:hover {
   border-color: var(--brand);
   color: var(--brand);
+}
+
+.edit-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 0.9rem;
+}
+
+.edit-header-row h2 {
+  margin: 0;
+  color: var(--text-heading);
+}
+
+.edit-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.edit-form .actions,
+.edit-form .status-message {
+  grid-column: 1 / -1;
 }
 
 .freshness-panel {
@@ -743,6 +788,19 @@ tbody tr {
   .metadata-modal-actions {
     flex-wrap: wrap;
     gap: 0.4rem;
+  }
+
+  .metadata-action-group {
+    flex-wrap: wrap;
+  }
+
+  .edit-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .edit-form {
+    grid-template-columns: 1fr;
   }
 
   .freshness-controls {
