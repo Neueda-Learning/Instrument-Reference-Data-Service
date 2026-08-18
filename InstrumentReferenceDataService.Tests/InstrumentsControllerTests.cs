@@ -355,7 +355,9 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
         );
 
         var response = await httpClient.PostAsync("/api/instruments", jsonContent);
+        var error = await response.Content.ReadAsStringAsync();
 
+        Assert.Equal("An instrument with this ISIN already exists", error.Trim());
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 

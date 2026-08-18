@@ -138,6 +138,50 @@ public sealed class InstrumentsControllerAuditTests : IClassFixture<TestWebAppli
     }
 
     [Fact]
+    public async Task GetAuditByInstrumentId_ResolvesReferenceIdsToReadableValues()
+    {
+        // Arrange
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        await SeedRequiredReferenceDataAsync(dbContext);
+
+        var token = NextToken();
+        var instrumentId = $"INS-AUD-MEANINGFUL-{token}";
+        dbContext.Instruments.Add(CreateInstrument(instrumentId, BuildUniqueIsin(token, '4')));
+
+        var changedAt = new DateTime(2026, 1, 20, 12, 0, 0, DateTimeKind.Utc);
+        dbContext.InstrumentAudits.Add(new InstrumentAudit
+        {
+            AuditId = $"AUD-{instrumentId}-SECTOR",
+            InstrumentId = instrumentId,
+            ChangedAt = changedAt,
+            ChangedBy = "reference.admin",
+            FieldName = "sector_id",
+            OldValue = "1",
+            NewValue = "2",
+            ChangeSource = "BackfillJob"
+        });
+
+        await dbContext.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+
+        // Act
+        var response = await client.GetAsync($"/api/instruments/{instrumentId}/audit");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var payload = await response.Content.ReadFromJsonAsync<List<InstrumentAuditResponse>>();
+        Assert.NotNull(payload);
+        var audit = Assert.Single(payload);
+        Assert.Equal("sector_id", audit.FieldName);
+        Assert.Equal("Technology (1)", audit.OldValue);
+        Assert.Equal("Healthcare (2)", audit.NewValue);
+    }
+
+    [Fact]
     public async Task GetAuditByInstrumentId_ReturnsNotFound_ForNonexistentInstrument()
     {
         // Arrange
@@ -172,6 +216,15 @@ public sealed class InstrumentsControllerAuditTests : IClassFixture<TestWebAppli
                 {
                     SectorId = 1,
                     SectorName = "Technology"
+                });
+            }
+
+            if (!await dbContext.Sectors.AnyAsync(item => item.SectorId == 2))
+            {
+                dbContext.Sectors.Add(new Sector
+                {
+                    SectorId = 2,
+                    SectorName = "Healthcare"
                 });
             }
 
