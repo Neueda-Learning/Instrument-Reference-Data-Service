@@ -10,6 +10,8 @@ builder.Services.AddOpenApi();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>();
 builder.Services.AddScoped<MockDataGenerator>();
+builder.Services.AddScoped<InstrumentQueryService>();
+builder.Services.AddScoped<InstrumentCommandService>();
 builder.Services.AddHostedService<DataQualityCheckService>();
 builder.Services.AddControllers();
 
