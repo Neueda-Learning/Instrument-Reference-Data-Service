@@ -547,7 +547,7 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
 
         Assert.NotNull(result);
 
-        var failingItem = Assert.Single(result.Where(item => item.InstrumentId == failingInstrumentId));
+        var failingItem = Assert.Single(result, item => item.InstrumentId == failingInstrumentId);
 
         Assert.Equal("Failing Quality Instrument", failingItem.Name);
         Assert.Contains(failingItem.FailingIndicators, indicator => indicator.Code == "PRIMARY_ISIN_FORMAT_INVALID");
