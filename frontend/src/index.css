@@ -23,10 +23,15 @@
   --nav-text-active: #c7d8f5;
 
   /* Text */
+  --text-primary: #2d3d57;
+  --text-secondary: #506078;
   --text-strong: #0d1526;
   --text: #2d3d57;
   --text-soft: #506078;
   --text-muted: #8b9ab4;
+
+  /* Modal */
+  --modal-bg: #ffffff;
 
   /* Semantic colours */
   --green: #059669;
@@ -77,6 +82,64 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Dark Mode */
+:root.dark-mode {
+  /* Backgrounds */
+  --bg: #0f1419;
+  --surface: #1a1f2e;
+  --surface-raised: #242b3a;
+  --surface-sunken: #131820;
+
+  /* Borders */
+  --border: #2d3544;
+  --border-strong: #3a4556;
+
+  /* Text */
+  --text-primary: #e5e9f0;
+  --text-secondary: #8b95a7;
+  --text-strong: #f0f4ff;
+  --text: #e5e9f0;
+  --text-soft: #8b95a7;
+  --text-muted: #6b7684;
+
+  /* Modal */
+  --modal-bg: #1a1f2e;
+
+  /* Navigation */
+  --nav-bg: #0d1120;
+  --nav-text: #8b95a7;
+  --nav-text-hover: #d1d9e6;
+  --nav-text-active: #a7c7ff;
+
+  /* Brand muted (dark version) */
+  --brand-muted: rgba(37, 99, 235, 0.12);
+  --brand-border: rgba(59, 130, 246, 0.3);
+
+  /* Semantic colours */
+  --blue-bg: rgba(37, 99, 235, 0.15);
+  --blue-border: rgba(59, 130, 246, 0.3);
+  --red-bg: rgba(239, 68, 68, 0.15);
+  --red-border: rgba(239, 68, 68, 0.3);
+  --red: #f87171;
+  --green: #34d399;
+  --green-bg: rgba(16, 185, 129, 0.15);
+  --green-border: rgba(52, 211, 153, 0.3);
+  --amber: #fbbf24;
+  --amber-bg: rgba(180, 83, 9, 0.15);
+  --amber-border: rgba(217, 119, 6, 0.3);
+}
+
+/* Text selection */
+::selection {
+  background: rgba(37, 99, 235, 0.25);
+  color: inherit;
+}
+
+:root.dark-mode ::selection {
+  background: rgba(59, 130, 246, 0.4);
+  color: #f0f4ff;
 }
 
 *,
