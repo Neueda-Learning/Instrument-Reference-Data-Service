@@ -622,7 +622,7 @@ function App() {
           <div className="search-mode-toggle" style={{ marginBottom: '1rem' }}>
             <button
               type="button"
-              className="link-button"
+              className="button button-primary"
               onClick={() => setUseAdvancedSearch(!useAdvancedSearch)}
             >
               {useAdvancedSearch ? '← Back to Simple Search' : 'Advanced Search →'}
