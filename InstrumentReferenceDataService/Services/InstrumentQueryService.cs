@@ -9,6 +9,14 @@ namespace InstrumentReferenceDataService.Services;
 
 public sealed class InstrumentQueryService
 {
+    private const string AssetClassIdFieldName = "asset_class_id";
+    private const string SectorIdFieldName = "sector_id";
+    private const string ExchangeIdFieldName = "exchange_id";
+    private const string CurrencyIdFieldName = "currency_id";
+    private const string IssuerIdFieldName = "issuer_id";
+
+    private sealed record ExchangeDisplayValue(string MicCode, string ExchangeName);
+
     private static readonly Regex IsinFormatRegex = new("^[A-Z]{2}[A-Z0-9]{9}[0-9]$", RegexOptions.Compiled);
     private static readonly InstrumentQualityIndicatorResponse StatusMissingIndicator = new(
         "STATUS_MISSING",
@@ -347,12 +355,7 @@ public sealed class InstrumentQueryService
             return null;
         }
 
-        return await dbContext.InstrumentAudits
-            .AsNoTracking()
-            .Where(item => item.InstrumentId == id)
-            .OrderByDescending(item => item.ChangedAt)
-            .SelectAuditResponse()
-            .ToListAsync(cancellationToken);
+        return await BuildAuditResponsesAsync(id, cancellationToken);
     }
 
     public async Task<InstrumentEditOptionsResponse> GetEditOptionsAsync(CancellationToken cancellationToken)
@@ -436,14 +439,89 @@ public sealed class InstrumentQueryService
             .SelectIdentifierResponse()
             .ToListAsync(cancellationToken);
 
+        var auditResponses = await BuildAuditResponsesAsync(instrumentId, cancellationToken);
+
+        return new InstrumentDetailResponse(instrument, identifiers, auditResponses);
+    }
+
+    private async Task<IReadOnlyCollection<InstrumentAuditResponse>> BuildAuditResponsesAsync(string instrumentId, CancellationToken cancellationToken)
+    {
         var audits = await dbContext.InstrumentAudits
             .AsNoTracking()
             .Where(item => item.InstrumentId == instrumentId)
             .OrderByDescending(item => item.ChangedAt)
-            .SelectAuditResponse()
             .ToListAsync(cancellationToken);
 
-        return new InstrumentDetailResponse(instrument, identifiers, audits);
+        if (audits.Count == 0)
+        {
+            return Array.Empty<InstrumentAuditResponse>();
+        }
+
+        var assetClassMap = await dbContext.AssetClasses
+            .AsNoTracking()
+            .ToDictionaryAsync(item => item.AssetClassId, item => item.Name, cancellationToken);
+
+        var sectorMap = await dbContext.Sectors
+            .AsNoTracking()
+            .ToDictionaryAsync(item => item.SectorId, item => item.SectorName, cancellationToken);
+
+        var exchangeMap = await dbContext.Exchanges
+            .AsNoTracking()
+            .ToDictionaryAsync(item => item.ExchangeId, item => new ExchangeDisplayValue(item.MicCode, item.ExchangeName), cancellationToken);
+
+        var currencyMap = await dbContext.Currencies
+            .AsNoTracking()
+            .ToDictionaryAsync(item => item.CurrencyId, item => item.CurrencyName, cancellationToken);
+
+        var issuerMap = await dbContext.Issuers
+            .AsNoTracking()
+            .ToDictionaryAsync(item => item.IssuerId, item => item.IssuerName, cancellationToken);
+
+        return audits
+            .Select(audit => new InstrumentAuditResponse(
+                audit.AuditId,
+                audit.ChangedAt,
+                audit.ChangedBy,
+                audit.FieldName,
+                GetDisplayAuditValue(audit.FieldName, audit.OldValue, assetClassMap, sectorMap, exchangeMap, currencyMap, issuerMap),
+                GetDisplayAuditValue(audit.FieldName, audit.NewValue, assetClassMap, sectorMap, exchangeMap, currencyMap, issuerMap),
+                audit.ChangeSource))
+            .ToList();
+    }
+
+    private static string? GetDisplayAuditValue(
+        string fieldName,
+        string? rawValue,
+        IReadOnlyDictionary<string, string> assetClassMap,
+        IReadOnlyDictionary<int, string> sectorMap,
+        IReadOnlyDictionary<int, ExchangeDisplayValue> exchangeMap,
+        IReadOnlyDictionary<int, string> currencyMap,
+        IReadOnlyDictionary<int, string> issuerMap)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return rawValue;
+        }
+
+        return fieldName switch
+        {
+            AssetClassIdFieldName => assetClassMap.TryGetValue(rawValue, out var assetClassName)
+                ? $"{assetClassName} ({rawValue})"
+                : rawValue,
+            SectorIdFieldName => int.TryParse(rawValue, out var sectorId) && sectorMap.TryGetValue(sectorId, out var sectorName)
+                ? $"{sectorName} ({sectorId})"
+                : rawValue,
+            ExchangeIdFieldName => int.TryParse(rawValue, out var exchangeId) && exchangeMap.TryGetValue(exchangeId, out var exchange)
+                ? $"{exchange.ExchangeName} ({exchange.MicCode}, {exchangeId})"
+                : rawValue,
+            CurrencyIdFieldName => int.TryParse(rawValue, out var currencyId) && currencyMap.TryGetValue(currencyId, out var currencyName)
+                ? $"{currencyName} ({currencyId})"
+                : rawValue,
+            IssuerIdFieldName => int.TryParse(rawValue, out var issuerId) && issuerMap.TryGetValue(issuerId, out var issuerName)
+                ? $"{issuerName} ({issuerId})"
+                : rawValue,
+            _ => rawValue
+        };
     }
 
     private IQueryable<Instrument> ApplyIdentifierFilters(IQueryable<Instrument> query, string? isin, string? cusip)
