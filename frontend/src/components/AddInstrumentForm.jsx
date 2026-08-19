@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
+import { normalizeIdentifierInput, validateIdentifierByType } from '../utils/identifierValidation'
 
-const ISIN_REGEX = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/
 const INSTRUMENT_ID_REGEX = /^INS-\d{12}-\d{4}$/
 
 function generateInstrumentId() {
@@ -18,7 +18,7 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10)
 }
 
-function validate(fields) {
+function validate(fields, identifierValues) {
   const errors = {}
 
   if (!INSTRUMENT_ID_REGEX.test(fields.instrumentId.trim())) {
@@ -31,12 +31,14 @@ function validate(fields) {
     errors.name = 'Name must be 150 characters or fewer.'
   }
 
-  const isinUpper = fields.primaryIsin.trim().toUpperCase()
+  const isinUpper = normalizeIdentifierInput(fields.primaryIsin)
   if (!isinUpper) {
     errors.primaryIsin = 'Primary ISIN is required.'
-  } else if (!ISIN_REGEX.test(isinUpper)) {
-    errors.primaryIsin =
-      'ISIN must be exactly 12 characters: 2 uppercase letters, 9 uppercase letters/digits, then 1 digit (e.g. US38259P5089).'
+  } else {
+    const primaryIsinError = validateIdentifierByType('ISIN', isinUpper)
+    if (primaryIsinError) {
+      errors.primaryIsin = primaryIsinError
+    }
   }
 
   if (!fields.assetClassId) {
@@ -67,10 +69,17 @@ function validate(fields) {
     errors.effectiveDate = 'Effective date is required.'
   }
 
+  Object.entries(identifierValues ?? {}).forEach(([typeId, value]) => {
+    const validationMessage = validateIdentifierByType(typeId, value)
+    if (validationMessage) {
+      errors[`identifier:${typeId}`] = validationMessage
+    }
+  })
+
   return errors
 }
 
-function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
+function AddInstrumentForm({ options, isSaving, error, serverErrors = {}, onSubmit, onCancel }) {
   const [instrumentId, setInstrumentId] = useState(() => generateInstrumentId())
   const [name, setName] = useState('')
   const [primaryIsin, setPrimaryIsin] = useState('')
@@ -110,7 +119,7 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
     effectiveDate,
   }
 
-  const validationErrors = useMemo(() => validate(fields), [
+  const validationErrors = useMemo(() => validate(fields, identifierValues), [
     instrumentId,
     name,
     primaryIsin,
@@ -121,6 +130,7 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
     issuerId,
     status,
     effectiveDate,
+    identifierValues,
   ])
 
   const isFormValid = Object.keys(validationErrors).length === 0
@@ -146,6 +156,7 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
       issuerId: true,
       status: true,
       effectiveDate: true,
+      ...Object.fromEntries(editableIdentifierTypes.map((item) => [`identifier:${item.identifierTypeId}`, true])),
     })
 
     if (!isFormValid) {
@@ -153,8 +164,11 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
     }
 
     const additionalIdentifiers = Object.entries(identifierValues)
-      .filter(([, value]) => value.trim().length > 0)
-      .map(([identifierTypeId, value]) => ({ identifierTypeId, identifierValue: value.trim() }))
+      .map(([identifierTypeId, value]) => ({
+        identifierTypeId,
+        identifierValue: normalizeIdentifierInput(value),
+      }))
+      .filter((item) => item.identifierValue.length > 0)
 
     await onSubmit({
       instrumentId: instrumentId.trim(),
@@ -171,7 +185,14 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
     })
   }
 
-  const fieldError = (field) => (touched[field] ? validationErrors[field] : undefined)
+  const fieldError = (field) => {
+    const clientError = touched[field] ? validationErrors[field] : undefined
+    if (clientError) {
+      return clientError
+    }
+
+    return serverErrors[field]
+  }
 
   return (
     <section className="table-panel" aria-label="Add Instrument">
@@ -232,6 +253,7 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
             onChange={(event) => setAssetClassId(event.target.value)}
             onBlur={() => handleBlur('assetClassId')}
             required
+            aria-describedby={fieldError('assetClassId') ? 'add-asset-class-error' : undefined}
           >
             <option value="" disabled>Select asset class…</option>
             {options.assetClasses.map((item) => (
@@ -240,6 +262,11 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
               </option>
             ))}
           </select>
+          {fieldError('assetClassId') ? (
+            <span id="add-asset-class-error" className="field-error" role="alert">
+              {fieldError('assetClassId')}
+            </span>
+          ) : null}
         </div>
 
         <div className="field-row">
@@ -250,6 +277,7 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
             onChange={(event) => setSectorId(event.target.value)}
             onBlur={() => handleBlur('sectorId')}
             required
+            aria-describedby={fieldError('sectorId') ? 'add-sector-error' : undefined}
           >
             <option value="" disabled>Select sector…</option>
             {options.sectors.map((item) => (
@@ -258,6 +286,11 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
               </option>
             ))}
           </select>
+          {fieldError('sectorId') ? (
+            <span id="add-sector-error" className="field-error" role="alert">
+              {fieldError('sectorId')}
+            </span>
+          ) : null}
         </div>
 
         <div className="field-row">
@@ -268,6 +301,7 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
             onChange={(event) => setExchangeId(event.target.value)}
             onBlur={() => handleBlur('exchangeId')}
             required
+            aria-describedby={fieldError('exchangeId') ? 'add-exchange-error' : undefined}
           >
             <option value="" disabled>Select exchange…</option>
             {options.exchanges.map((item) => (
@@ -276,6 +310,11 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
               </option>
             ))}
           </select>
+          {fieldError('exchangeId') ? (
+            <span id="add-exchange-error" className="field-error" role="alert">
+              {fieldError('exchangeId')}
+            </span>
+          ) : null}
         </div>
 
         <div className="field-row">
@@ -286,6 +325,7 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
             onChange={(event) => setCurrencyId(event.target.value)}
             onBlur={() => handleBlur('currencyId')}
             required
+            aria-describedby={fieldError('currencyId') ? 'add-currency-error' : undefined}
           >
             <option value="" disabled>Select currency…</option>
             {options.currencies.map((item) => (
@@ -294,6 +334,11 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
               </option>
             ))}
           </select>
+          {fieldError('currencyId') ? (
+            <span id="add-currency-error" className="field-error" role="alert">
+              {fieldError('currencyId')}
+            </span>
+          ) : null}
         </div>
 
         <div className="field-row">
@@ -304,6 +349,7 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
             onChange={(event) => setIssuerId(event.target.value)}
             onBlur={() => handleBlur('issuerId')}
             required
+            aria-describedby={fieldError('issuerId') ? 'add-issuer-error' : undefined}
           >
             <option value="" disabled>Select issuer…</option>
             {options.issuers.map((item) => (
@@ -312,6 +358,11 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
               </option>
             ))}
           </select>
+          {fieldError('issuerId') ? (
+            <span id="add-issuer-error" className="field-error" role="alert">
+              {fieldError('issuerId')}
+            </span>
+          ) : null}
         </div>
 
         <div className="field-row">
@@ -322,6 +373,7 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
             onChange={(event) => setStatus(event.target.value)}
             onBlur={() => handleBlur('status')}
             required
+            aria-describedby={fieldError('status') ? 'add-status-error' : undefined}
           >
             <option value="" disabled>Select status…</option>
             {options.statuses.map((item) => (
@@ -330,6 +382,11 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
               </option>
             ))}
           </select>
+          {fieldError('status') ? (
+            <span id="add-status-error" className="field-error" role="alert">
+              {fieldError('status')}
+            </span>
+          ) : null}
         </div>
 
         <div className="field-row">
@@ -387,10 +444,16 @@ function AddInstrumentForm({ options, isSaving, error, onSubmit, onCancel }) {
             <input
               id={`add-id-${idType.identifierTypeId}`}
               value={identifierValues[idType.identifierTypeId] ?? ''}
-              onChange={(event) => handleIdentifierChange(idType.identifierTypeId, event.target.value)}
+              onChange={(event) => handleIdentifierChange(idType.identifierTypeId, event.target.value.toUpperCase())}
+              onBlur={() => handleBlur(`identifier:${idType.identifierTypeId}`)}
               maxLength={200}
               placeholder={`Enter ${idType.name} value`}
             />
+            {fieldError(`identifier:${idType.identifierTypeId}`) ? (
+              <span className="field-error" role="alert">
+                {fieldError(`identifier:${idType.identifierTypeId}`)}
+              </span>
+            ) : null}
           </div>
         ))}
 

@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using InstrumentReferenceDataService.Contracts;
 using InstrumentReferenceDataService.Data;
 using InstrumentReferenceDataService.Models;
@@ -16,13 +15,29 @@ public enum CreateInstrumentStatus
 public sealed record CreateInstrumentResult(
     CreateInstrumentStatus Status,
     string? ErrorMessage,
-    string? CreatedInstrumentId)
+    string? CreatedInstrumentId,
+    IReadOnlyDictionary<string, string[]>? ValidationErrors)
 {
-    public static CreateInstrumentResult Created(string instrumentId) => new(CreateInstrumentStatus.Created, null, instrumentId);
+    public static CreateInstrumentResult Created(string instrumentId) => new(CreateInstrumentStatus.Created, null, instrumentId, null);
 
-    public static CreateInstrumentResult BadRequest(string message) => new(CreateInstrumentStatus.BadRequest, message, null);
+    public static CreateInstrumentResult BadRequest(string field, string message) =>
+        new(
+            CreateInstrumentStatus.BadRequest,
+            message,
+            null,
+            new Dictionary<string, string[]>(StringComparer.Ordinal)
+            {
+                [field] = [message]
+            });
 
-    public static CreateInstrumentResult Conflict(string message) => new(CreateInstrumentStatus.Conflict, message, null);
+    public static CreateInstrumentResult BadRequest(IDictionary<string, string[]> validationErrors) =>
+        new(
+            CreateInstrumentStatus.BadRequest,
+            "One or more validation errors occurred.",
+            null,
+            new Dictionary<string, string[]>(validationErrors, StringComparer.Ordinal));
+
+    public static CreateInstrumentResult Conflict(string message) => new(CreateInstrumentStatus.Conflict, message, null, null);
 }
 
 public enum UpdateInstrumentStatus
@@ -61,8 +76,6 @@ public enum DeleteInstrumentStatus
 
 public sealed class InstrumentCommandService
 {
-    private static readonly Regex IsinFormatRegex = new("^[A-Z]{2}[A-Z0-9]{9}[0-9]$", RegexOptions.Compiled);
-
     private readonly AppDbContext dbContext;
 
     public InstrumentCommandService(AppDbContext dbContext)
@@ -90,33 +103,32 @@ public sealed class InstrumentCommandService
     {
         if (string.IsNullOrWhiteSpace(request.InstrumentId))
         {
-            return CreateInstrumentResult.BadRequest("InstrumentId is required");
+            return CreateInstrumentResult.BadRequest(nameof(CreateInstrumentRequest.InstrumentId), "InstrumentId is required");
         }
 
         if (string.IsNullOrWhiteSpace(request.Name))
         {
-            return CreateInstrumentResult.BadRequest("Name is required");
+            return CreateInstrumentResult.BadRequest(nameof(CreateInstrumentRequest.Name), "Name is required");
         }
 
         if (string.IsNullOrWhiteSpace(request.AssetClassId))
         {
-            return CreateInstrumentResult.BadRequest("AssetClassId is required");
+            return CreateInstrumentResult.BadRequest(nameof(CreateInstrumentRequest.AssetClassId), "AssetClassId is required");
         }
 
         if (string.IsNullOrWhiteSpace(request.Status))
         {
-            return CreateInstrumentResult.BadRequest("Status is required");
+            return CreateInstrumentResult.BadRequest(nameof(CreateInstrumentRequest.Status), "Status is required");
         }
 
         if (string.IsNullOrWhiteSpace(request.PrimaryIsin))
         {
-            return CreateInstrumentResult.BadRequest("PrimaryIsin is required");
+            return CreateInstrumentResult.BadRequest(nameof(CreateInstrumentRequest.PrimaryIsin), "PrimaryIsin is required");
         }
 
-        var normalizedIsin = request.PrimaryIsin.Trim().ToUpperInvariant();
-        if (!IsinFormatRegex.IsMatch(normalizedIsin))
+        if (!IdentifierFormatValidator.TryNormalizeAndValidate("ISIN", request.PrimaryIsin, out var normalizedIsin, out var primaryIsinValidationError))
         {
-            return CreateInstrumentResult.BadRequest("PrimaryIsin must be a valid 12-character ISIN");
+            return CreateInstrumentResult.BadRequest(nameof(CreateInstrumentRequest.PrimaryIsin), primaryIsinValidationError!);
         }
 
         var existingInstrument = await dbContext.Instruments
@@ -146,7 +158,7 @@ public sealed class InstrumentCommandService
 
         if (!assetClassExists)
         {
-            return CreateInstrumentResult.BadRequest($"AssetClass '{request.AssetClassId}' does not exist");
+            return CreateInstrumentResult.BadRequest(nameof(CreateInstrumentRequest.AssetClassId), $"AssetClass '{request.AssetClassId}' does not exist");
         }
 
         var sectorExists = await dbContext.Sectors
@@ -154,7 +166,7 @@ public sealed class InstrumentCommandService
 
         if (!sectorExists)
         {
-            return CreateInstrumentResult.BadRequest($"Sector with ID {request.SectorId} does not exist");
+            return CreateInstrumentResult.BadRequest(nameof(CreateInstrumentRequest.SectorId), $"Sector with ID {request.SectorId} does not exist");
         }
 
         var exchangeExists = await dbContext.Exchanges
@@ -162,7 +174,7 @@ public sealed class InstrumentCommandService
 
         if (!exchangeExists)
         {
-            return CreateInstrumentResult.BadRequest($"Exchange with ID {request.ExchangeId} does not exist");
+            return CreateInstrumentResult.BadRequest(nameof(CreateInstrumentRequest.ExchangeId), $"Exchange with ID {request.ExchangeId} does not exist");
         }
 
         var currencyExists = await dbContext.Currencies
@@ -170,7 +182,7 @@ public sealed class InstrumentCommandService
 
         if (!currencyExists)
         {
-            return CreateInstrumentResult.BadRequest($"Currency with ID {request.CurrencyId} does not exist");
+            return CreateInstrumentResult.BadRequest(nameof(CreateInstrumentRequest.CurrencyId), $"Currency with ID {request.CurrencyId} does not exist");
         }
 
         var issuerExists = await dbContext.Issuers
@@ -178,16 +190,24 @@ public sealed class InstrumentCommandService
 
         if (!issuerExists)
         {
-            return CreateInstrumentResult.BadRequest($"Issuer with ID {request.IssuerId} does not exist");
+            return CreateInstrumentResult.BadRequest(nameof(CreateInstrumentRequest.IssuerId), $"Issuer with ID {request.IssuerId} does not exist");
         }
 
         // Validate additional identifier types before persisting anything
         var additionalIdentifiers = request.AdditionalIdentifiers
             ?.Where(item => !string.IsNullOrWhiteSpace(item.IdentifierValue))
+            .Where(item => !string.IsNullOrWhiteSpace(item.IdentifierTypeId))
             .Where(item => !string.Equals(item.IdentifierTypeId, "ISIN", StringComparison.OrdinalIgnoreCase))
+            .Select(item => new
+            {
+                IdentifierTypeId = item.IdentifierTypeId.Trim().ToUpperInvariant(),
+                IdentifierValue = item.IdentifierValue.Trim()
+            })
             .GroupBy(item => item.IdentifierTypeId, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToList() ?? [];
+
+        var validatedAdditionalIdentifiers = new List<(string IdentifierTypeId, string IdentifierValue)>();
 
         foreach (var additionalIdentifier in additionalIdentifiers)
         {
@@ -196,8 +216,23 @@ public sealed class InstrumentCommandService
 
             if (!typeExists)
             {
-                return CreateInstrumentResult.BadRequest($"Identifier type '{additionalIdentifier.IdentifierTypeId}' does not exist");
+                return CreateInstrumentResult.BadRequest(
+                    $"{nameof(CreateInstrumentRequest.AdditionalIdentifiers)}[{additionalIdentifier.IdentifierTypeId}].{nameof(AdditionalIdentifierInput.IdentifierTypeId)}",
+                    $"Identifier type '{additionalIdentifier.IdentifierTypeId}' does not exist");
             }
+
+            if (!IdentifierFormatValidator.TryNormalizeAndValidate(
+                    additionalIdentifier.IdentifierTypeId,
+                    additionalIdentifier.IdentifierValue,
+                    out var normalizedIdentifierValue,
+                    out var additionalIdentifierValidationError))
+            {
+                return CreateInstrumentResult.BadRequest(
+                    $"{nameof(CreateInstrumentRequest.AdditionalIdentifiers)}[{additionalIdentifier.IdentifierTypeId}].{nameof(AdditionalIdentifierInput.IdentifierValue)}",
+                    additionalIdentifierValidationError!);
+            }
+
+            validatedAdditionalIdentifiers.Add((additionalIdentifier.IdentifierTypeId, normalizedIdentifierValue));
         }
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -230,12 +265,12 @@ public sealed class InstrumentCommandService
             }
         };
 
-        identifiers.AddRange(additionalIdentifiers.Select(item => new InstrumentIdentifier
+        identifiers.AddRange(validatedAdditionalIdentifiers.Select(item => new InstrumentIdentifier
         {
-            IdentifierId = $"ID-{item.IdentifierTypeId.ToUpperInvariant()}-{request.InstrumentId}",
+            IdentifierId = $"ID-{item.IdentifierTypeId}-{request.InstrumentId}",
             InstrumentId = request.InstrumentId,
-            IdentifierTypeId = item.IdentifierTypeId.ToUpperInvariant(),
-            IdentifierValue = item.IdentifierValue.Trim(),
+            IdentifierTypeId = item.IdentifierTypeId,
+            IdentifierValue = item.IdentifierValue,
             EffectiveDate = request.EffectiveDate,
         }));
 
@@ -247,10 +282,64 @@ public sealed class InstrumentCommandService
         }
         catch (DbUpdateException)
         {
-            return CreateInstrumentResult.Conflict("An instrument with this InstrumentId or PrimaryIsin already exists in the database.");
+            var conflictDetails = await BuildCreateConflictDetailsAsync(
+                request.InstrumentId,
+                normalizedIsin,
+                validatedAdditionalIdentifiers,
+                cancellationToken);
+
+            return CreateInstrumentResult.Conflict(conflictDetails);
         }
 
         return CreateInstrumentResult.Created(request.InstrumentId);
+    }
+
+    private async Task<string> BuildCreateConflictDetailsAsync(
+        string instrumentId,
+        string normalizedIsin,
+        IReadOnlyCollection<(string IdentifierTypeId, string IdentifierValue)> additionalIdentifiers,
+        CancellationToken cancellationToken)
+    {
+        var conflicts = new List<string>();
+
+        var instrumentIdExists = await dbContext.Instruments
+            .AsNoTracking()
+            .AnyAsync(item => item.InstrumentId == instrumentId, cancellationToken);
+        if (instrumentIdExists)
+        {
+            conflicts.Add($"InstrumentId '{instrumentId}'");
+        }
+
+        var primaryIsinExists = await dbContext.Instruments
+            .AsNoTracking()
+            .AnyAsync(item => item.PrimaryIsin == normalizedIsin, cancellationToken);
+        if (primaryIsinExists)
+        {
+            conflicts.Add($"PrimaryIsin '{normalizedIsin}'");
+        }
+
+        foreach (var additionalIdentifier in additionalIdentifiers)
+        {
+            var exists = await dbContext.InstrumentIdentifiers
+                .AsNoTracking()
+                .AnyAsync(
+                    item => item.IdentifierTypeId == additionalIdentifier.IdentifierTypeId
+                        && item.IdentifierValue == additionalIdentifier.IdentifierValue,
+                    cancellationToken);
+
+            if (exists)
+            {
+                conflicts.Add(
+                    $"{additionalIdentifier.IdentifierTypeId} ({additionalIdentifier.IdentifierValue})");
+            }
+        }
+
+        if (conflicts.Count == 0)
+        {
+            return "A unique constraint was violated while creating the instrument.";
+        }
+
+        return $"Duplicate value(s) detected for: {string.Join(", ", conflicts)}.";
     }
 
     public async Task<UpdateInstrumentResult> UpdateAsync(string id, UpdateInstrumentCommand command, CancellationToken cancellationToken)
