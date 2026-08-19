@@ -362,6 +362,90 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Create_WithAdditionalIdentifiers_PersistsIsInAndAdditionalIdentifiers()
+    {
+        await SeedReferenceDataAsync();
+
+        // Seed a CUSIP identifier type so additional identifier validation passes
+        await using (var scope = webApplicationFactory.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            if (!dbContext.IdentifierTypes.Any(t => t.IdentifierTypeId == "CUSIP"))
+            {
+                dbContext.IdentifierTypes.Add(new IdentifierType
+                {
+                    IdentifierTypeId = "CUSIP",
+                    IdentifierTypeName = "CUSIP"
+                });
+                await dbContext.SaveChangesAsync();
+            }
+        }
+
+        var instrumentId = $"INS-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
+        var primaryIsin = $"US{Guid.NewGuid().ToString("N").Substring(0, 9).ToUpper()}1";
+
+        var request = new CreateInstrumentRequest(
+            instrumentId,
+            "Identifier Test Instrument",
+            primaryIsin,
+            "EQ",
+            1,
+            1,
+            1,
+            1,
+            "Active",
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            [new AdditionalIdentifierInput("CUSIP", "123456789")]
+        );
+
+        var jsonContent = new StringContent(
+            JsonSerializer.Serialize(request),
+            Encoding.UTF8,
+            "application/json"
+        );
+
+        var response = await httpClient.PostAsync("/api/instruments", jsonContent);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var detail = await httpClient.GetFromJsonAsync<InstrumentDetailResponse>($"/api/instruments/{instrumentId}");
+        Assert.NotNull(detail);
+        Assert.Contains(detail.Identifiers, id => id.IdentifierTypeId == "ISIN" && id.IdentifierValue == primaryIsin);
+        Assert.Contains(detail.Identifiers, id => id.IdentifierTypeId == "CUSIP" && id.IdentifierValue == "123456789");
+    }
+
+    [Fact]
+    public async Task Create_WithUnknownAdditionalIdentifierType_ReturnsBadRequest()
+    {
+        await SeedReferenceDataAsync();
+
+        var instrumentId = $"INS-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
+        var primaryIsin = $"US{Guid.NewGuid().ToString("N").Substring(0, 9).ToUpper()}1";
+
+        var request = new CreateInstrumentRequest(
+            instrumentId,
+            "Bad Identifier Type Instrument",
+            primaryIsin,
+            "EQ",
+            1,
+            1,
+            1,
+            1,
+            "Active",
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            [new AdditionalIdentifierInput("NONEXISTENT", "VALUE")]
+        );
+
+        var jsonContent = new StringContent(
+            JsonSerializer.Serialize(request),
+            Encoding.UTF8,
+            "application/json"
+        );
+
+        var response = await httpClient.PostAsync("/api/instruments", jsonContent);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task GetInstruments_WithoutQueryParams_ReturnsAllInstruments()
     {
         using var factory = new TestWebApplicationFactory();
@@ -434,6 +518,8 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
         Assert.Contains(payload.Issuers, item => item.IssuerId == 1);
         Assert.Contains(payload.Statuses, item => string.Equals(item.Value, "Active", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(payload.Statuses, item => string.Equals(item.Value, "Pending", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(payload.IdentifierTypes, item => item.IdentifierTypeId == "ISIN");
+        Assert.Contains(payload.IdentifierTypes, item => item.IdentifierTypeId == "CUSIP");
     }
 
     [Fact]

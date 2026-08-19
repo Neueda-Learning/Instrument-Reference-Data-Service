@@ -301,6 +301,36 @@
   cursor: default;
 }
 
+.field-error {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--danger, #dc2626);
+}
+
+.field-hint {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.field-label-required {
+  color: var(--danger, #dc2626);
+}
+
+.add-form-section-heading {
+  margin-top: 1.25rem;
+  margin-bottom: 0.25rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 /* ===================================================================
    BUTTONS
    =================================================================== */

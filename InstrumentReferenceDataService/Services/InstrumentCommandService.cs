@@ -181,6 +181,25 @@ public sealed class InstrumentCommandService
             return CreateInstrumentResult.BadRequest($"Issuer with ID {request.IssuerId} does not exist");
         }
 
+        // Validate additional identifier types before persisting anything
+        var additionalIdentifiers = request.AdditionalIdentifiers
+            ?.Where(item => !string.IsNullOrWhiteSpace(item.IdentifierValue))
+            .Where(item => !string.Equals(item.IdentifierTypeId, "ISIN", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(item => item.IdentifierTypeId, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList() ?? [];
+
+        foreach (var additionalIdentifier in additionalIdentifiers)
+        {
+            var typeExists = await dbContext.IdentifierTypes
+                .AnyAsync(item => item.IdentifierTypeId == additionalIdentifier.IdentifierTypeId, cancellationToken);
+
+            if (!typeExists)
+            {
+                return CreateInstrumentResult.BadRequest($"Identifier type '{additionalIdentifier.IdentifierTypeId}' does not exist");
+            }
+        }
+
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         var instrument = new Instrument
@@ -198,9 +217,32 @@ public sealed class InstrumentCommandService
             LastUpdated = today
         };
 
+        // Always add an ISIN identifier matching the primary ISIN
+        var identifiers = new List<InstrumentIdentifier>
+        {
+            new()
+            {
+                IdentifierId = $"ID-ISIN-{request.InstrumentId}",
+                InstrumentId = request.InstrumentId,
+                IdentifierTypeId = "ISIN",
+                IdentifierValue = normalizedIsin,
+                EffectiveDate = request.EffectiveDate,
+            }
+        };
+
+        identifiers.AddRange(additionalIdentifiers.Select(item => new InstrumentIdentifier
+        {
+            IdentifierId = $"ID-{item.IdentifierTypeId.ToUpperInvariant()}-{request.InstrumentId}",
+            InstrumentId = request.InstrumentId,
+            IdentifierTypeId = item.IdentifierTypeId.ToUpperInvariant(),
+            IdentifierValue = item.IdentifierValue.Trim(),
+            EffectiveDate = request.EffectiveDate,
+        }));
+
         try
         {
             dbContext.Instruments.Add(instrument);
+            dbContext.InstrumentIdentifiers.AddRange(identifiers);
             await dbContext.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateException)
