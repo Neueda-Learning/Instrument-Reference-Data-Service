@@ -12,4 +12,5 @@ public sealed partial class InstrumentsController
 
         return Ok(response);
     }
+
 }

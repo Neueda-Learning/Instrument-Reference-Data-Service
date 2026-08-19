@@ -653,6 +653,25 @@ tbody tr.table-row-selected td:first-child {
   border-color: var(--red-border);
 }
 
+.status-suspended {
+  background: var(--red-bg);
+  color: var(--red);
+  border-color: var(--red);
+  border-width: 2px;
+}
+
+.status-pending {
+  background: var(--amber-bg);
+  color: var(--amber);
+  border-color: var(--amber-border);
+}
+
+.status-delisted {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  border-color: var(--border-strong);
+}
+
 /* View metadata button */
 .view-meta-button {
   display: inline-flex;
@@ -1121,6 +1140,164 @@ tbody tr.table-row-selected td:first-child {
   border-top: 1px solid var(--border);
   background: var(--surface-raised);
   flex-wrap: wrap;
+}
+
+/* ===================================================================
+   TABLE ENHANCEMENTS - BULK SELECTION
+   =================================================================== */
+
+.checkbox-column {
+  width: 40px;
+  padding: 0.5rem;
+  text-align: center;
+}
+
+.checkbox-column input[type='checkbox'] {
+  cursor: pointer;
+  accent-color: #3b82f6;
+}
+
+.table-row-bulk-selected {
+  background: rgba(37, 99, 235, 0.08) !important;
+}
+
+.table-row-bulk-selected:hover {
+  background: rgba(37, 99, 235, 0.12) !important;
+}
+
+/* ===================================================================
+   BUTTON VARIATIONS
+   =================================================================== */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button-primary {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+.button-primary:hover:not(:disabled) {
+  background: #2563eb;
+  border-color: #2563eb;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.button-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.button-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.button-sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+}
+
+.link-button {
+  background: transparent;
+  border: none;
+  color: #3b82f6;
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: 0.9375rem;
+  padding: 0;
+  transition: color 0.2s;
+  font-weight: 500;
+}
+
+.link-button:hover:not(:disabled) {
+  color: #1d4ed8;
+}
+
+.link-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===================================================================
+   SEARCH MODE TOGGLE
+   =================================================================== */
+
+.search-mode-toggle {
+  text-align: center;
+  padding: 0.5rem 0;
+}
+
+/* ===================================================================
+   RESPONSIVE DESIGN IMPROVEMENTS
+   =================================================================== */
+
+@media (max-width: 1024px) {
+  .page-container {
+    padding: 1.5rem 1rem;
+  }
+
+  .filters-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-title {
+    font-size: 1.5rem;
+  }
+
+  .page-description {
+    font-size: 0.875rem;
+  }
+
+  .table-scroll {
+    overflow-x: auto;
+  }
+
+  table {
+    font-size: 0.8125rem;
+  }
+
+  .filters-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pagination-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pagination-bar > * {
+    width: 100%;
+  }
+
+  .nav-inner {
+    padding: 0 1rem;
+  }
+
+  .page-container {
+    padding: 1rem;
+  }
 }
 
 .pagination-meta {

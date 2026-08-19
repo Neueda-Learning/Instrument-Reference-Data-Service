@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 import InstrumentSearchForm from './components/InstrumentSearchForm'
+import AdvancedSearch from './components/AdvancedSearch'
 import InstrumentsTable from './components/InstrumentsTable'
 import InstrumentMetadataPanel from './components/InstrumentMetadataPanel'
+import InstrumentDetailModal from './components/InstrumentDetailModal'
+import BulkOperationsPanel from './components/BulkOperationsPanel'
 import DataFreshnessView from './components/DataFreshnessView'
 import PaginationControls from './components/PaginationControls'
 import EditInstrumentForm from './components/EditInstrumentForm'
+import ThemeToggle from './components/ThemeToggle'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -88,11 +92,57 @@ function App() {
     recentWithinDays: 7,
   })
 
+  // New state for advanced search and bulk operations
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem('irds-dark-mode') === 'true'
+    }
+    return false
+  })
+  const [selectedBulkIds, setSelectedBulkIds] = useState([])
+  const [useAdvancedSearch, setUseAdvancedSearch] = useState(false)
+  const [advancedFilters, setAdvancedFilters] = useState(null)
+  const [assetClasses, setAssetClasses] = useState([])
+  const [sectors, setSectors] = useState([])
+  const [exchanges, setExchanges] = useState([])
+
   const loadHomeInstruments = useCallback(async () => {
     setIsLoadingHome(true)
     setHomeError('')
 
     try {
+      // Advanced search: fetch all, filter client-side
+      if (advancedFilters) {
+        const response = await fetch(`${API_BASE_URL}/api/instruments`)
+        if (!response.ok) throw new Error(`Request failed with status ${response.status}`)
+        const allItemsPayload = await response.json()
+        const allItems = Array.isArray(allItemsPayload) ? allItemsPayload : []
+
+        const q = advancedFilters.query?.toLowerCase() ?? ''
+        const filtered = allItems.filter((item) => {
+          const inst = item.instrument ?? {}
+          if (q) {
+            const haystack = [inst.name, inst.issuerName, inst.sectorName, inst.assetClassName]
+              .map((v) => (v ?? '').toLowerCase())
+              .join(' ')
+            if (!haystack.includes(q)) return false
+          }
+          if (advancedFilters.assetClasses?.length && !advancedFilters.assetClasses.includes(inst.assetClassId)) return false
+          if (advancedFilters.sectors?.length && !advancedFilters.sectors.includes(inst.sectorId)) return false
+          if (advancedFilters.exchanges?.length && !advancedFilters.exchanges.includes(inst.exchangeId)) return false
+          if (advancedFilters.statuses?.length && !advancedFilters.statuses.includes((inst.status ?? '').toLowerCase())) return false
+          return true
+        })
+
+        const sortedItems = sortInstrumentRows(filtered, sortBy, sortDirection)
+        const startIndex = (homePage - 1) * homePageSize
+        const pagedItems = sortedItems.slice(startIndex, startIndex + homePageSize)
+        setRows(pagedItems)
+        setHomeTotalCount(sortedItems.length)
+        if (pagedItems.length === 0) setSelectedInstrumentId('')
+        return
+      }
+
       const hasIdentifierSearch = Boolean(appliedFilters.isin || appliedFilters.cusip)
 
       if (hasIdentifierSearch) {
@@ -162,7 +212,7 @@ function App() {
     } finally {
       setIsLoadingHome(false)
     }
-  }, [appliedFilters, homePage, homePageSize, sortBy, sortDirection, monitorQuickFilter])
+  }, [advancedFilters, appliedFilters, homePage, homePageSize, sortBy, sortDirection, monitorQuickFilter])
 
   useEffect(() => {
     loadHomeInstruments()
@@ -225,22 +275,35 @@ function App() {
   }, [homeTotalCount, homePage, homePageSize])
 
   useEffect(() => {
-    if (!isMetadataModalOpen) {
-      return undefined
+    localStorage.setItem('irds-dark-mode', isDarkMode)
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark-mode')
+    } else {
+      document.documentElement.classList.remove('dark-mode')
     }
+  }, [isDarkMode])
 
-    const handleEscape = (event) => {
-      if (event.key === 'Escape') {
-        setIsMetadataModalOpen(false)
+  // Load edit options (assetClasses, sectors, exchanges)
+  useEffect(() => {
+    const loadEditOptions = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/instruments/options`)
+        if (!response.ok) throw new Error('Failed to load options')
+        const data = await response.json()
+        setAssetClasses(data.assetClasses || [])
+        setSectors(data.sectors || [])
+        setExchanges(data.exchanges || [])
+      } catch (error) {
+        console.error('Failed to load edit options:', error)
       }
     }
+    loadEditOptions()
+  }, [])
 
-    window.addEventListener('keydown', handleEscape)
-
-    return () => {
-      window.removeEventListener('keydown', handleEscape)
-    }
-  }, [isMetadataModalOpen])
+  // Scroll to top on page change
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [currentPage])
 
   const handleOpenMetadataModal = async (instrumentId) => {
     setSelectedInstrumentId(instrumentId)
@@ -397,6 +460,58 @@ function App() {
     setCurrentPage('home')
   }
 
+  // Bulk operations handlers
+  const handleToggleBulkSelect = useCallback(
+    (instrumentId) => {
+      setSelectedBulkIds((prev) =>
+        prev.includes(instrumentId)
+          ? prev.filter((id) => id !== instrumentId)
+          : [...prev, instrumentId]
+      )
+    },
+    []
+  )
+
+  const handleSelectAllBulk = useCallback(
+    (shouldSelectAll) => {
+      if (shouldSelectAll) {
+        setSelectedBulkIds(rows.map((row) => row.instrument.instrumentId))
+      } else {
+        setSelectedBulkIds([])
+      }
+    },
+    [rows]
+  )
+
+  const handleClearBulkSelection = useCallback(() => {
+    setSelectedBulkIds([])
+  }, [])
+
+  const handleBulkDelete = useCallback(async () => {
+    if (!selectedBulkIds.length) return
+    if (!window.confirm(`Delete ${selectedBulkIds.length} instruments? This cannot be undone.`)) return
+
+    try {
+      for (const id of selectedBulkIds) {
+        await fetch(`${API_BASE_URL}/api/instruments/${id}`, { method: 'DELETE' })
+      }
+      setSelectedBulkIds([])
+      await loadHomeInstruments()
+    } catch (error) {
+      console.error('Bulk delete failed:', error)
+      alert('Some deletions failed. Please try again.')
+    }
+  }, [selectedBulkIds, loadHomeInstruments])
+
+  const handleAdvancedSearch = useCallback((filters) => {
+    setAdvancedFilters(filters)
+    setHomePage(1)
+  }, [])
+
+  const toggleTheme = useCallback(() => {
+    setIsDarkMode((prev) => !prev)
+  }, [])
+
   const isQuickFilterActive = monitorQuickFilter.type !== 'all'
   const isHomePage = currentPage === 'home'
   const isMonitoringPage = currentPage === 'monitoring'
@@ -449,6 +564,7 @@ function App() {
           </div>
 
           <div className="nav-right">
+            <ThemeToggle isDarkMode={isDarkMode} onToggle={toggleTheme} />
             <div className="api-status-badge" aria-label="API connected">
               <span className="api-status-dot" aria-hidden="true" />
               API Connected
@@ -475,16 +591,53 @@ function App() {
             </p>
           </header>
 
-          <InstrumentSearchForm
-            isin={isin}
-            cusip={cusip}
+          {!useAdvancedSearch && (
+            <InstrumentSearchForm
+              isin={isin}
+              cusip={cusip}
+              isLoading={isLoadingHome}
+              hasActiveFilters={hasActiveFilters}
+              lastQuery={appliedFilters}
+              onIsinChange={setIsin}
+              onCusipChange={setCusip}
+              onSearch={handleSearch}
+              onReset={handleReset}
+            />
+          )}
+
+          {useAdvancedSearch && (
+            <AdvancedSearch
+              isLoading={isLoadingHome}
+              assetClasses={assetClasses}
+              sectors={sectors}
+              exchanges={exchanges}
+              onSearch={handleAdvancedSearch}
+              onReset={() => {
+                setAdvancedFilters(null)
+                handleReset()
+                setUseAdvancedSearch(false)
+              }}
+            />
+          )}
+
+          <div className="search-mode-toggle" style={{ marginBottom: '1rem' }}>
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => setUseAdvancedSearch(!useAdvancedSearch)}
+            >
+              {useAdvancedSearch ? '← Back to Simple Search' : 'Advanced Search →'}
+            </button>
+          </div>
+
+          <BulkOperationsPanel
+            selectedIds={selectedBulkIds}
+            onSelectAll={handleSelectAllBulk}
+            onClearSelection={handleClearBulkSelection}
+            onBulkDelete={handleBulkDelete}
+            onBulkEdit={() => alert('Bulk edit coming soon')}
             isLoading={isLoadingHome}
-            hasActiveFilters={hasActiveFilters}
-            lastQuery={appliedFilters}
-            onIsinChange={setIsin}
-            onCusipChange={setCusip}
-            onSearch={handleSearch}
-            onReset={handleReset}
+            totalRows={homeTotalCount}
           />
 
           <section className="table-panel" aria-label="Instrument Table">
@@ -536,6 +689,9 @@ function App() {
                   onSort={handleSort}
                   onSelectInstrument={setSelectedInstrumentId}
                   onOpenMetadata={handleOpenMetadataModal}
+                  selectedIds={selectedBulkIds}
+                  onToggleSelect={handleToggleBulkSelect}
+                  onSelectAllRows={handleSelectAllBulk}
                 />
                 <PaginationControls
                   label="Home Table"
@@ -714,6 +870,17 @@ function App() {
           </div>
         </div>
       ) : null}
+
+      <InstrumentDetailModal
+        isOpen={isMetadataModalOpen}
+        instrument={selectedInstrumentDetail?.instrument}
+        identifiers={selectedInstrumentDetail?.identifiers}
+        isLoading={isLoadingMetadata}
+        error={metadataError}
+        onClose={handleCloseMetadataModal}
+        onEdit={handleOpenEditPage}
+        onDelete={handleDeleteInstrument}
+      />
     </div>
   )
 }
