@@ -6,6 +6,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
 export default function ChatWindow() {
   const [isOpen, setIsOpen] = useState(false)
+  const [isMinimized, setIsMinimized] = useState(false)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [isSending, setIsSending] = useState(false)
@@ -62,23 +63,39 @@ export default function ChatWindow() {
 
   return (
     <div className="chat-widget" aria-label="AI Assistant">
-      {isOpen ? (
+      {isOpen && !isMinimized ? (
         <div className="chat-panel" role="dialog" aria-label="AI Financial Assistant">
           <div className="chat-header">
             <div className="chat-header-info">
               <span className="chat-header-dot" aria-hidden="true" />
               <span className="chat-header-title">AI Assistant</span>
             </div>
-            <button
-              type="button"
-              className="chat-close-btn"
-              onClick={() => setIsOpen(false)}
-              aria-label="Close chat"
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                <path d="M2 2l8 8M10 2L2 10" />
-              </svg>
-            </button>
+            <div className="chat-header-buttons">
+              <button
+                type="button"
+                className="chat-minimize-btn"
+                onClick={() => setIsMinimized(true)}
+                aria-label="Minimize chat"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M2 6h8" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className="chat-close-btn"
+                onClick={() => {
+                  setIsOpen(false)
+                  setIsMinimized(false)
+                  setMessages([])
+                }}
+                aria-label="Close chat and clear history"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M2 2l8 8M10 2L2 10" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div className="chat-messages" ref={messagesContainerRef} aria-live="polite" aria-label="Conversation">
@@ -144,11 +161,17 @@ export default function ChatWindow() {
       <button
         type="button"
         className="chat-toggle-btn"
-        onClick={() => setIsOpen((prev) => !prev)}
-        aria-label={isOpen ? 'Close AI Assistant' : 'Open AI Assistant'}
-        aria-expanded={isOpen}
+        onClick={() => {
+          if (isMinimized) {
+            setIsMinimized(false)
+          } else {
+            setIsOpen((prev) => !prev)
+          }
+        }}
+        aria-label={isOpen && !isMinimized ? 'Hide AI Assistant' : 'Open AI Assistant'}
+        aria-expanded={isOpen && !isMinimized}
       >
-        {isOpen ? (
+        {isOpen && !isMinimized ? (
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <path d="M4 4l12 12M16 4L4 16" />
           </svg>
