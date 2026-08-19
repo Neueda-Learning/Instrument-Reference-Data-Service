@@ -520,10 +520,7 @@ function App() {
 
           <div className="nav-right">
             <ThemeToggle isDarkMode={isDarkMode} onToggle={toggleTheme} />
-            <div className="api-status-badge" aria-label="API connected">
-              <span className="api-status-dot" aria-hidden="true" />
-              API Connected
-            </div>
+            
           </div>
         </div>
       </nav>
