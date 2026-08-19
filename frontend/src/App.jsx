@@ -7,6 +7,7 @@ import InstrumentMetadataPanel from './components/InstrumentMetadataPanel'
 import DataFreshnessView from './components/DataFreshnessView'
 import PaginationControls from './components/PaginationControls'
 import EditInstrumentForm from './components/EditInstrumentForm'
+import AddInstrumentForm from './components/AddInstrumentForm'
 import ThemeToggle from './components/ThemeToggle'
 import ChatWindow from './components/ChatWindow'
 
@@ -81,6 +82,10 @@ function App() {
   const [editError, setEditError] = useState('')
   const [editSubmitError, setEditSubmitError] = useState('')
   const [editSuccess, setEditSuccess] = useState('')
+  const [addOptions, setAddOptions] = useState(null)
+  const [isLoadingAdd, setIsLoadingAdd] = useState(false)
+  const [isSavingAdd, setIsSavingAdd] = useState(false)
+  const [addSubmitError, setAddSubmitError] = useState('')
   const [isEditSuccessPopupOpen, setIsEditSuccessPopupOpen] = useState(false)
   const [editSuccessPopupMessage, setEditSuccessPopupMessage] = useState('')
   const [homePage, setHomePage] = useState(1)
@@ -467,10 +472,67 @@ function App() {
     setIsDarkMode((prev) => !prev)
   }, [])
 
+  const handleOpenAddPage = useCallback(async () => {
+    setAddSubmitError('')
+    setIsLoadingAdd(true)
+    setCurrentPage('add')
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/instruments/options`)
+      if (!response.ok) throw new Error('Failed to load options')
+      const data = await response.json()
+      setAddOptions(data)
+    } catch {
+      setAddOptions(null)
+    } finally {
+      setIsLoadingAdd(false)
+    }
+  }, [])
+
+  const handleSaveAdd = async (payload) => {
+    setAddSubmitError('')
+    setIsSavingAdd(true)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/instruments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (response.status === 409) {
+        const message = await response.text()
+        setAddSubmitError(message || 'An instrument with this ID or ISIN already exists.')
+        return
+      }
+
+      if (!response.ok) {
+        const message = await response.text()
+        setAddSubmitError(message || `Create failed with status ${response.status}.`)
+        return
+      }
+
+      await loadHomeInstruments()
+      setEditSuccessPopupMessage(`Instrument "${payload.name}" (${payload.instrumentId}) was created successfully.`)
+      setIsEditSuccessPopupOpen(true)
+      setCurrentPage('home')
+    } catch {
+      setAddSubmitError('Unable to create instrument. Please verify your input and try again.')
+    } finally {
+      setIsSavingAdd(false)
+    }
+  }
+
+  const handleCancelAdd = () => {
+    setCurrentPage('home')
+    setAddSubmitError('')
+  }
+
   const isQuickFilterActive = monitorQuickFilter.type !== 'all'
   const isHomePage = currentPage === 'home'
   const isMonitoringPage = currentPage === 'monitoring'
   const isEditPage = currentPage === 'edit'
+  const isAddPage = currentPage === 'add'
 
   return (
     <div className="app-shell">
@@ -515,6 +577,11 @@ function App() {
                   Edit Instrument
                 </button>
               ) : null}
+              {isAddPage ? (
+                <button type="button" className="top-nav-link active">
+                  Add Instrument
+                </button>
+              ) : null}
             </div>
           </div>
 
@@ -536,11 +603,23 @@ function App() {
               <span className="page-breadcrumb-sep" aria-hidden="true">›</span>
               <span className="page-breadcrumb-current">Instruments</span>
             </p>
-            <h1 className="page-title">Instrument Search &amp; Reference Table</h1>
-            <p className="page-description">
-              Search financial instruments by identifier and review the complete reference
-              dataset in one fast, analyst-focused view.
-            </p>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+              <div>
+                <h1 className="page-title">Instrument Search &amp; Reference Table</h1>
+                <p className="page-description">
+                  Search financial instruments by identifier and review the complete reference
+                  dataset in one fast, analyst-focused view.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="button button-primary"
+                style={{ marginTop: '0.25rem', whiteSpace: 'nowrap' }}
+                onClick={handleOpenAddPage}
+              >
+                + Add Instrument
+              </button>
+            </div>
           </header>
 
           {!useAdvancedSearch && (
@@ -673,6 +752,40 @@ function App() {
               onApplyQuickFilter={handleApplyMonitorQuickFilter}
             />
           ) : <p className="status-message error">Unable to load monitoring data because the API is unavailable.</p>}
+        </>
+      ) : null}
+
+      {isAddPage ? (
+        <>
+          <header className="page-header">
+            <p className="page-breadcrumb">
+              <span>IRDS</span>
+              <span className="page-breadcrumb-sep" aria-hidden="true">›</span>
+              <span>Instruments</span>
+              <span className="page-breadcrumb-sep" aria-hidden="true">›</span>
+              <span className="page-breadcrumb-current">Add Instrument</span>
+            </p>
+            <h1 className="page-title">Add Instrument</h1>
+            <p className="page-description">
+              Fill in the details below to create a new instrument. The Instrument ID is
+              auto-generated following the <code>INS-YYMMDDHHMMSS-NNNN</code> format; you
+              may edit it if needed. The Primary ISIN must be a valid 12-character code.
+            </p>
+          </header>
+
+          {isLoadingAdd ? <p className="status-message">Loading form…</p> : null}
+          {!isLoadingAdd && addOptions ? (
+            <AddInstrumentForm
+              options={addOptions}
+              isSaving={isSavingAdd}
+              error={addSubmitError}
+              onSubmit={handleSaveAdd}
+              onCancel={handleCancelAdd}
+            />
+          ) : null}
+          {!isLoadingAdd && !addOptions ? (
+            <p className="status-message error">Unable to load form options. Please try again.</p>
+          ) : null}
         </>
       ) : null}
 

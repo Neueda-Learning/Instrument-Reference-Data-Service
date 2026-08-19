@@ -101,13 +101,18 @@ public sealed record IssuerOptionResponse(
 public sealed record StatusOptionResponse(
     string Value);
 
+public sealed record IdentifierTypeOptionResponse(
+    string IdentifierTypeId,
+    string Name);
+
 public sealed record InstrumentEditOptionsResponse(
     IReadOnlyCollection<AssetClassOptionResponse> AssetClasses,
     IReadOnlyCollection<SectorOptionResponse> Sectors,
     IReadOnlyCollection<ExchangeOptionResponse> Exchanges,
     IReadOnlyCollection<CurrencyOptionResponse> Currencies,
     IReadOnlyCollection<IssuerOptionResponse> Issuers,
-    IReadOnlyCollection<StatusOptionResponse> Statuses);
+    IReadOnlyCollection<StatusOptionResponse> Statuses,
+    IReadOnlyCollection<IdentifierTypeOptionResponse> IdentifierTypes);
 
 
 
@@ -138,5 +143,17 @@ public sealed record CreateInstrumentRequest(
     [StringLength(32)]
     string Status,
     
-    DateOnly EffectiveDate
+    DateOnly EffectiveDate,
+
+    IReadOnlyCollection<AdditionalIdentifierInput>? AdditionalIdentifiers = null
+);
+
+public sealed record AdditionalIdentifierInput(
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(32)]
+    string IdentifierTypeId,
+
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(200)]
+    string IdentifierValue
 );

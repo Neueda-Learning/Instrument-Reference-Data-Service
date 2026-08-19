@@ -404,13 +404,20 @@ public sealed class InstrumentQueryService
             .Select(item => new StatusOptionResponse(item))
             .ToList();
 
+        var identifierTypes = await dbContext.IdentifierTypes
+            .AsNoTracking()
+            .OrderBy(item => item.IdentifierTypeName)
+            .Select(item => new IdentifierTypeOptionResponse(item.IdentifierTypeId, item.IdentifierTypeName))
+            .ToListAsync(cancellationToken);
+
         return new InstrumentEditOptionsResponse(
             assetClasses,
             sectors,
             exchanges,
             currencies,
             issuers,
-            statusOptions);
+            statusOptions,
+            identifierTypes);
     }
 
     private async Task<InstrumentDetailResponse?> BuildInstrumentDetailAsync(string instrumentId, CancellationToken cancellationToken)
