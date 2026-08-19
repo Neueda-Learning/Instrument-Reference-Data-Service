@@ -184,7 +184,7 @@ function AdvancedSearch({
               ))}
             </div>
           </div>
-        </div>\n
+        </div>
 
         {/* Actions */}
         <div className="search-actions">

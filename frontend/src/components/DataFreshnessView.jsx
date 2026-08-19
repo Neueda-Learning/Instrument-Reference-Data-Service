@@ -36,7 +36,10 @@ function FreshnessTable({ title, rows, emptyMessage, onOpenMetadata }) {
                         className="view-meta-button"
                         onClick={() => onOpenMetadata(row.instrumentId)}
                       >
-                        View Full Metadata
+                        View Details
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M2 5h6M5 2l3 3-3 3"/>
+                      </svg>
                       </button>
                     </td>
                   </tr>
