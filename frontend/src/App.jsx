@@ -13,6 +13,47 @@ import ChatWindow from './components/ChatWindow'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
+function mapCreateValidationErrors(rawErrors) {
+  if (!rawErrors || typeof rawErrors !== 'object') {
+    return {}
+  }
+
+  const mapped = {}
+  const fieldMap = {
+    instrumentid: 'instrumentId',
+    name: 'name',
+    primaryisin: 'primaryIsin',
+    assetclassid: 'assetClassId',
+    sectorid: 'sectorId',
+    exchangeid: 'exchangeId',
+    currencyid: 'currencyId',
+    issuerid: 'issuerId',
+    status: 'status',
+    effectivedate: 'effectiveDate',
+  }
+
+  Object.entries(rawErrors).forEach(([key, messages]) => {
+    const text = Array.isArray(messages) ? messages[0] : String(messages ?? '')
+    const normalizedKey = String(key ?? '').trim()
+    const normalizedLower = normalizedKey.toLowerCase()
+
+    if (fieldMap[normalizedLower]) {
+      mapped[fieldMap[normalizedLower]] = text
+      return
+    }
+
+    const additionalIdentifierMatch = normalizedKey.match(/^AdditionalIdentifiers\[(.+?)\]\.Identifier(Value|TypeId)$/i)
+    if (additionalIdentifierMatch) {
+      const typeId = String(additionalIdentifierMatch[1] ?? '').toUpperCase()
+      if (typeId) {
+        mapped[`identifier:${typeId}`] = text
+      }
+    }
+  })
+
+  return mapped
+}
+
 function pickIdentifierValue(identifiers, typeId) {
   if (!Array.isArray(identifiers)) {
     return ''
@@ -86,6 +127,7 @@ function App() {
   const [isLoadingAdd, setIsLoadingAdd] = useState(false)
   const [isSavingAdd, setIsSavingAdd] = useState(false)
   const [addSubmitError, setAddSubmitError] = useState('')
+  const [addFieldErrors, setAddFieldErrors] = useState({})
   const [isEditSuccessPopupOpen, setIsEditSuccessPopupOpen] = useState(false)
   const [editSuccessPopupMessage, setEditSuccessPopupMessage] = useState('')
   const [homePage, setHomePage] = useState(1)
@@ -474,6 +516,7 @@ function App() {
 
   const handleOpenAddPage = useCallback(async () => {
     setAddSubmitError('')
+    setAddFieldErrors({})
     setIsLoadingAdd(true)
     setCurrentPage('add')
 
@@ -491,6 +534,7 @@ function App() {
 
   const handleSaveAdd = async (payload) => {
     setAddSubmitError('')
+    setAddFieldErrors({})
     setIsSavingAdd(true)
 
     try {
@@ -507,6 +551,19 @@ function App() {
       }
 
       if (!response.ok) {
+        if (response.status === 400) {
+          const contentType = response.headers.get('content-type') ?? ''
+          if (contentType.includes('application/problem+json') || contentType.includes('application/json')) {
+            const validationPayload = await response.json().catch(() => null)
+            const mappedValidationErrors = mapCreateValidationErrors(validationPayload?.errors)
+            if (Object.keys(mappedValidationErrors).length > 0) {
+              setAddFieldErrors(mappedValidationErrors)
+              setAddSubmitError(validationPayload?.title || 'Please correct the highlighted fields and try again.')
+              return
+            }
+          }
+        }
+
         const message = await response.text()
         setAddSubmitError(message || `Create failed with status ${response.status}.`)
         return
@@ -516,6 +573,7 @@ function App() {
       setEditSuccessPopupMessage(`Instrument "${payload.name}" (${payload.instrumentId}) was created successfully.`)
       setIsEditSuccessPopupOpen(true)
       setCurrentPage('home')
+      setAddFieldErrors({})
     } catch {
       setAddSubmitError('Unable to create instrument. Please verify your input and try again.')
     } finally {
@@ -526,6 +584,7 @@ function App() {
   const handleCancelAdd = () => {
     setCurrentPage('home')
     setAddSubmitError('')
+    setAddFieldErrors({})
   }
 
   const isQuickFilterActive = monitorQuickFilter.type !== 'all'
@@ -779,6 +838,7 @@ function App() {
               options={addOptions}
               isSaving={isSavingAdd}
               error={addSubmitError}
+              serverErrors={addFieldErrors}
               onSubmit={handleSaveAdd}
               onCancel={handleCancelAdd}
             />

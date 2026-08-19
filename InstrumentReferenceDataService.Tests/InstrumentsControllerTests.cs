@@ -366,21 +366,6 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
     {
         await SeedReferenceDataAsync();
 
-        // Seed a CUSIP identifier type so additional identifier validation passes
-        await using (var scope = webApplicationFactory.Services.CreateAsyncScope())
-        {
-            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            if (!dbContext.IdentifierTypes.Any(t => t.IdentifierTypeId == "CUSIP"))
-            {
-                dbContext.IdentifierTypes.Add(new IdentifierType
-                {
-                    IdentifierTypeId = "CUSIP",
-                    IdentifierTypeName = "CUSIP"
-                });
-                await dbContext.SaveChangesAsync();
-            }
-        }
-
         var instrumentId = $"INS-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
         var primaryIsin = $"US{Guid.NewGuid().ToString("N").Substring(0, 9).ToUpper()}1";
 
@@ -395,7 +380,12 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
             1,
             "Active",
             DateOnly.FromDateTime(DateTime.UtcNow),
-            [new AdditionalIdentifierInput("CUSIP", "123456789")]
+            [
+                new AdditionalIdentifierInput("CUSIP", "LS9BSD30F"),
+                new AdditionalIdentifierInput("RIC", "XETR.5NWWCP"),
+                new AdditionalIdentifierInput("SEDOL", "BD5L398"),
+                new AdditionalIdentifierInput("TICKER", "HELIYH27")
+            ]
         );
 
         var jsonContent = new StringContent(
@@ -410,7 +400,45 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
         var detail = await httpClient.GetFromJsonAsync<InstrumentDetailResponse>($"/api/instruments/{instrumentId}");
         Assert.NotNull(detail);
         Assert.Contains(detail.Identifiers, id => id.IdentifierTypeId == "ISIN" && id.IdentifierValue == primaryIsin);
-        Assert.Contains(detail.Identifiers, id => id.IdentifierTypeId == "CUSIP" && id.IdentifierValue == "123456789");
+        Assert.Contains(detail.Identifiers, id => id.IdentifierTypeId == "CUSIP" && id.IdentifierValue == "LS9BSD30F");
+        Assert.Contains(detail.Identifiers, id => id.IdentifierTypeId == "RIC" && id.IdentifierValue == "XETR.5NWWCP");
+        Assert.Contains(detail.Identifiers, id => id.IdentifierTypeId == "SEDOL" && id.IdentifierValue == "BD5L398");
+        Assert.Contains(detail.Identifiers, id => id.IdentifierTypeId == "TICKER" && id.IdentifierValue == "HELIYH27");
+    }
+
+    [Fact]
+    public async Task Create_WithInvalidAdditionalIdentifierFormat_ReturnsBadRequest()
+    {
+        await SeedReferenceDataAsync();
+
+        var instrumentId = $"INS-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
+        var primaryIsin = $"US{Guid.NewGuid().ToString("N").Substring(0, 9).ToUpper()}1";
+
+        var request = new CreateInstrumentRequest(
+            instrumentId,
+            "Invalid Identifier Format Instrument",
+            primaryIsin,
+            "EQ",
+            1,
+            1,
+            1,
+            1,
+            "Active",
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            [new AdditionalIdentifierInput("CUSIP", "BAD")]
+        );
+
+        var jsonContent = new StringContent(
+            JsonSerializer.Serialize(request),
+            Encoding.UTF8,
+            "application/json"
+        );
+
+        var response = await httpClient.PostAsync("/api/instruments", jsonContent);
+        var error = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("Invalid CUSIP identifier format", error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -665,6 +693,28 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
             IdentifierTypeName = "International Securities Identification Number"
         });
 
+        dbContext.IdentifierTypes.AddRange(
+            new IdentifierType
+            {
+                IdentifierTypeId = "CUSIP",
+                IdentifierTypeName = "Committee on Uniform Securities Identification Procedures"
+            },
+            new IdentifierType
+            {
+                IdentifierTypeId = "RIC",
+                IdentifierTypeName = "Refinitiv Instrument Code"
+            },
+            new IdentifierType
+            {
+                IdentifierTypeId = "SEDOL",
+                IdentifierTypeName = "Stock Exchange Daily Official List"
+            },
+            new IdentifierType
+            {
+                IdentifierTypeId = "TICKER",
+                IdentifierTypeName = "Exchange Ticker Symbol"
+            });
+
         dbContext.Currencies.Add(new Currency { CurrencyId = 1, CurrencyName = "USD" });
         dbContext.Sectors.Add(new Sector { SectorId = 1, SectorName = "Technology" });
 
@@ -742,6 +792,21 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
             {
                 IdentifierTypeId = "CUSIP",
                 IdentifierTypeName = "Committee on Uniform Securities Identification Procedures"
+            },
+            new IdentifierType
+            {
+                IdentifierTypeId = "RIC",
+                IdentifierTypeName = "Refinitiv Instrument Code"
+            },
+            new IdentifierType
+            {
+                IdentifierTypeId = "SEDOL",
+                IdentifierTypeName = "Stock Exchange Daily Official List"
+            },
+            new IdentifierType
+            {
+                IdentifierTypeId = "TICKER",
+                IdentifierTypeName = "Exchange Ticker Symbol"
             });
 
         dbContext.Instruments.AddRange(

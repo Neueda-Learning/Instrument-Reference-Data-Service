@@ -148,6 +148,22 @@ public sealed partial class InstrumentsController : ControllerBase
         if (createResult.Status == CreateInstrumentStatus.BadRequest)
         {
             logger.LogWarning("Validation failed for new instrument {InstrumentId}: {Message}", request.InstrumentId, createResult.ErrorMessage);
+            if (createResult.ValidationErrors is { Count: > 0 })
+            {
+                var validationProblem = new ValidationProblemDetails
+                {
+                    Title = "One or more validation errors occurred.",
+                    Status = StatusCodes.Status400BadRequest,
+                };
+
+                foreach (var error in createResult.ValidationErrors)
+                {
+                    validationProblem.Errors.Add(error.Key, error.Value);
+                }
+
+                return BadRequest(validationProblem);
+            }
+
             return BadRequest(createResult.ErrorMessage);
         }
 
