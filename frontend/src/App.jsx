@@ -4,7 +4,6 @@ import InstrumentSearchForm from './components/InstrumentSearchForm'
 import AdvancedSearch from './components/AdvancedSearch'
 import InstrumentsTable from './components/InstrumentsTable'
 import InstrumentMetadataPanel from './components/InstrumentMetadataPanel'
-import InstrumentDetailModal from './components/InstrumentDetailModal'
 import BulkOperationsPanel from './components/BulkOperationsPanel'
 import DataFreshnessView from './components/DataFreshnessView'
 import PaginationControls from './components/PaginationControls'
@@ -871,16 +870,6 @@ function App() {
         </div>
       ) : null}
 
-      <InstrumentDetailModal
-        isOpen={isMetadataModalOpen}
-        instrument={selectedInstrumentDetail?.instrument}
-        identifiers={selectedInstrumentDetail?.identifiers}
-        isLoading={isLoadingMetadata}
-        error={metadataError}
-        onClose={handleCloseMetadataModal}
-        onEdit={handleOpenEditPage}
-        onDelete={handleDeleteInstrument}
-      />
     </div>
   )
 }
