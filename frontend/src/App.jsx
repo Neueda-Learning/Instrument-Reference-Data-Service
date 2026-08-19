@@ -4,7 +4,6 @@ import InstrumentSearchForm from './components/InstrumentSearchForm'
 import AdvancedSearch from './components/AdvancedSearch'
 import InstrumentsTable from './components/InstrumentsTable'
 import InstrumentMetadataPanel from './components/InstrumentMetadataPanel'
-import BulkOperationsPanel from './components/BulkOperationsPanel'
 import DataFreshnessView from './components/DataFreshnessView'
 import PaginationControls from './components/PaginationControls'
 import EditInstrumentForm from './components/EditInstrumentForm'
@@ -98,7 +97,6 @@ function App() {
     }
     return false
   })
-  const [selectedBulkIds, setSelectedBulkIds] = useState([])
   const [useAdvancedSearch, setUseAdvancedSearch] = useState(false)
   const [advancedFilters, setAdvancedFilters] = useState(null)
   const [assetClasses, setAssetClasses] = useState([])
@@ -459,49 +457,6 @@ function App() {
     setCurrentPage('home')
   }
 
-  // Bulk operations handlers
-  const handleToggleBulkSelect = useCallback(
-    (instrumentId) => {
-      setSelectedBulkIds((prev) =>
-        prev.includes(instrumentId)
-          ? prev.filter((id) => id !== instrumentId)
-          : [...prev, instrumentId]
-      )
-    },
-    []
-  )
-
-  const handleSelectAllBulk = useCallback(
-    (shouldSelectAll) => {
-      if (shouldSelectAll) {
-        setSelectedBulkIds(rows.map((row) => row.instrument.instrumentId))
-      } else {
-        setSelectedBulkIds([])
-      }
-    },
-    [rows]
-  )
-
-  const handleClearBulkSelection = useCallback(() => {
-    setSelectedBulkIds([])
-  }, [])
-
-  const handleBulkDelete = useCallback(async () => {
-    if (!selectedBulkIds.length) return
-    if (!window.confirm(`Delete ${selectedBulkIds.length} instruments? This cannot be undone.`)) return
-
-    try {
-      for (const id of selectedBulkIds) {
-        await fetch(`${API_BASE_URL}/api/instruments/${id}`, { method: 'DELETE' })
-      }
-      setSelectedBulkIds([])
-      await loadHomeInstruments()
-    } catch (error) {
-      console.error('Bulk delete failed:', error)
-      alert('Some deletions failed. Please try again.')
-    }
-  }, [selectedBulkIds, loadHomeInstruments])
-
   const handleAdvancedSearch = useCallback((filters) => {
     setAdvancedFilters(filters)
     setHomePage(1)
@@ -629,16 +584,6 @@ function App() {
             </button>
           </div>
 
-          <BulkOperationsPanel
-            selectedIds={selectedBulkIds}
-            onSelectAll={handleSelectAllBulk}
-            onClearSelection={handleClearBulkSelection}
-            onBulkDelete={handleBulkDelete}
-            onBulkEdit={() => alert('Bulk edit coming soon')}
-            isLoading={isLoadingHome}
-            totalRows={homeTotalCount}
-          />
-
           <section className="table-panel" aria-label="Instrument Table">
             {isQuickFilterActive ? (
               <div className="quick-filter-banner">
@@ -688,9 +633,6 @@ function App() {
                   onSort={handleSort}
                   onSelectInstrument={setSelectedInstrumentId}
                   onOpenMetadata={handleOpenMetadataModal}
-                  selectedIds={selectedBulkIds}
-                  onToggleSelect={handleToggleBulkSelect}
-                  onSelectAllRows={handleSelectAllBulk}
                 />
                 <PaginationControls
                   label="Home Table"

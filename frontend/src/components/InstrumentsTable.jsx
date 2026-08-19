@@ -29,9 +29,6 @@ function InstrumentsTable({
   onSort,
   onSelectInstrument,
   onOpenMetadata,
-  selectedIds,
-  onToggleSelect,
-  onSelectAllRows,
 }) {
   return (
     <>
@@ -39,17 +36,6 @@ function InstrumentsTable({
         <table>
           <thead>
             <tr>
-              {selectedIds !== undefined && (
-                <th className="checkbox-column">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.length > 0 && selectedIds.length === rows.length}
-                    indeterminate={selectedIds.length > 0 && selectedIds.length < rows.length}
-                    onChange={() => onSelectAllRows(!selectedIds.length || selectedIds.length < rows.length)}
-                    aria-label="Select all visible instruments"
-                  />
-                </th>
-              )}
               <th>
                 <button
                   type="button"
@@ -93,24 +79,13 @@ function InstrumentsTable({
             {rows.map((row) => {
               const instrumentId = row.instrument.instrumentId
               const isSelected = selectedInstrumentId === instrumentId
-              const isBulkSelected = selectedIds && selectedIds.includes(instrumentId)
 
               return (
                 <tr
                   key={instrumentId}
-                  className={`${isSelected ? 'table-row-selected' : ''} ${isBulkSelected ? 'table-row-bulk-selected' : ''}`}
+                  className={isSelected ? 'table-row-selected' : ''}
                   onClick={() => onSelectInstrument(instrumentId)}
                 >
-                  {selectedIds !== undefined && (
-                    <td className="checkbox-column" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={isBulkSelected}
-                        onChange={() => onToggleSelect(instrumentId)}
-                        aria-label={`Select ${row.instrument.name}`}
-                      />
-                    </td>
-                  )}
                   <td className="mono">{instrumentId}</td>
                   <td style={{ fontWeight: 500 }}>{row.instrument.name}</td>
                   <td className="mono">{pickIdentifier(row.identifiers, 'ISIN')}</td>
