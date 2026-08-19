@@ -9,6 +9,7 @@ import DataFreshnessView from './components/DataFreshnessView'
 import PaginationControls from './components/PaginationControls'
 import EditInstrumentForm from './components/EditInstrumentForm'
 import ThemeToggle from './components/ThemeToggle'
+import ChatWindow from './components/ChatWindow'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -870,6 +871,7 @@ function App() {
         </div>
       ) : null}
 
+      <ChatWindow />
     </div>
   )
 }

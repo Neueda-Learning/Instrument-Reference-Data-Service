@@ -13,6 +13,7 @@ builder.Services.AddScoped<MockDataGenerator>();
 builder.Services.AddScoped<InstrumentQueryService>();
 builder.Services.AddScoped<InstrumentCommandService>();
 builder.Services.AddHostedService<DataQualityCheckService>();
+builder.Services.AddHttpClient<InstrumentReferenceDataService.Services.GroqChatService>();
 builder.Services.AddControllers();
 
 var useSqlite = builder.Environment.IsEnvironment("Testing") || builder.Configuration.GetValue<bool>("UseSqlite");
