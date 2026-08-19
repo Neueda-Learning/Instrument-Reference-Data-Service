@@ -1098,7 +1098,7 @@ tbody tr.table-row-selected td:first-child {
 
 .freshness-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr;
   gap: 1.25rem;
   padding: 1.25rem;
 }
