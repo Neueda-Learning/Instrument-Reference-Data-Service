@@ -35,18 +35,28 @@ cd InstrumentReferenceDataService
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Server=localhost;Port=3306;Database=instrument_reference_db;User=<user>;Password=<password>;"
 ```
 
-### 4. Apply database migrations
+### 4. Configure GroqAPI Key
+
+- Create an account on (Groq website)[https://console.groq.com/].
+- Generate a new API_KEY
+- Add the created key to user secrets
+
+```bash
+ dotnet user-secrets set "Groq:ApiKey" "<YOUR API KEY>"
+```
+
+### 5. Apply database migrations
 
 ```bash
 dotnet ef database update
 ```
 
-### 5. Run the application
+### 6. Run the application
 
 ```bash
 dotnet run
 ```
-### 6. Run the tests
+### 7. Run the tests
 
 ```bash
 
@@ -55,7 +65,7 @@ cd InstrumentReferenceDataService.Tests
 dotnet test
 ```
 
-### 7. Run the frontend (React + Vite)
+### 8. Run the frontend (React + Vite)
 
 ```bash
 cd frontend
