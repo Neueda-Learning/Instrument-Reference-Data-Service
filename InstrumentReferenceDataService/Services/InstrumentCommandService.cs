@@ -44,28 +44,48 @@ public enum UpdateInstrumentStatus
 {
     Updated,
     NotFound,
-    BadRequest
+    BadRequest,
+    Conflict
 }
 
 public sealed record UpdateInstrumentCommand(
     string Name,
+    string PrimaryIsin,
     string AssetClassId,
     int SectorId,
     int ExchangeId,
     int CurrencyId,
     int IssuerId,
     string Status,
-    DateOnly EffectiveDate);
+    DateOnly EffectiveDate,
+    IReadOnlyCollection<AdditionalIdentifierInput>? AdditionalIdentifiers = null);
 
 public sealed record UpdateInstrumentResult(
     UpdateInstrumentStatus Status,
-    string? ErrorMessage)
+    string? ErrorMessage,
+    IReadOnlyDictionary<string, string[]>? ValidationErrors)
 {
-    public static UpdateInstrumentResult Updated() => new(UpdateInstrumentStatus.Updated, null);
+    public static UpdateInstrumentResult Updated() => new(UpdateInstrumentStatus.Updated, null, null);
 
-    public static UpdateInstrumentResult NotFound() => new(UpdateInstrumentStatus.NotFound, null);
+    public static UpdateInstrumentResult NotFound() => new(UpdateInstrumentStatus.NotFound, null, null);
 
-    public static UpdateInstrumentResult BadRequest(string message) => new(UpdateInstrumentStatus.BadRequest, message);
+    public static UpdateInstrumentResult BadRequest(string field, string message) =>
+        new(
+            UpdateInstrumentStatus.BadRequest,
+            message,
+            new Dictionary<string, string[]>(StringComparer.Ordinal)
+            {
+                [field] = [message]
+            });
+
+    public static UpdateInstrumentResult BadRequest(IDictionary<string, string[]> validationErrors) =>
+        new(
+            UpdateInstrumentStatus.BadRequest,
+            "One or more validation errors occurred.",
+            new Dictionary<string, string[]>(validationErrors, StringComparer.Ordinal));
+
+    public static UpdateInstrumentResult Conflict(string message) =>
+        new(UpdateInstrumentStatus.Conflict, message, null);
 }
 
 public enum DeleteInstrumentStatus
@@ -344,6 +364,31 @@ public sealed class InstrumentCommandService
 
     public async Task<UpdateInstrumentResult> UpdateAsync(string id, UpdateInstrumentCommand command, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(command.Name))
+        {
+            return UpdateInstrumentResult.BadRequest(nameof(UpdateInstrumentCommand.Name), "Name is required");
+        }
+
+        if (string.IsNullOrWhiteSpace(command.PrimaryIsin))
+        {
+            return UpdateInstrumentResult.BadRequest(nameof(UpdateInstrumentCommand.PrimaryIsin), "PrimaryIsin is required");
+        }
+
+        if (string.IsNullOrWhiteSpace(command.AssetClassId))
+        {
+            return UpdateInstrumentResult.BadRequest(nameof(UpdateInstrumentCommand.AssetClassId), "AssetClassId is required");
+        }
+
+        if (string.IsNullOrWhiteSpace(command.Status))
+        {
+            return UpdateInstrumentResult.BadRequest(nameof(UpdateInstrumentCommand.Status), "Status is required");
+        }
+
+        if (!IdentifierFormatValidator.TryNormalizeAndValidate("ISIN", command.PrimaryIsin, out var normalizedIsin, out var primaryIsinValidationError))
+        {
+            return UpdateInstrumentResult.BadRequest(nameof(UpdateInstrumentCommand.PrimaryIsin), primaryIsinValidationError!);
+        }
+
         var instrument = await dbContext.Instruments
             .SingleOrDefaultAsync(item => item.InstrumentId == id, cancellationToken);
 
@@ -352,12 +397,30 @@ public sealed class InstrumentCommandService
             return UpdateInstrumentResult.NotFound();
         }
 
+        var conflictingPrimaryIsin = await dbContext.Instruments
+            .AnyAsync(item => item.InstrumentId != id && item.PrimaryIsin == normalizedIsin, cancellationToken);
+
+        if (!conflictingPrimaryIsin)
+        {
+            conflictingPrimaryIsin = await dbContext.InstrumentIdentifiers
+                .AnyAsync(
+                    item => item.InstrumentId != id
+                        && item.IdentifierTypeId == "ISIN"
+                        && item.IdentifierValue == normalizedIsin,
+                    cancellationToken);
+        }
+
+        if (conflictingPrimaryIsin)
+        {
+            return UpdateInstrumentResult.Conflict("An instrument with this ISIN already exists");
+        }
+
         var assetClassExists = await dbContext.AssetClasses
             .AnyAsync(item => item.AssetClassId == command.AssetClassId, cancellationToken);
 
         if (!assetClassExists)
         {
-            return UpdateInstrumentResult.BadRequest($"AssetClass '{command.AssetClassId}' does not exist");
+            return UpdateInstrumentResult.BadRequest(nameof(UpdateInstrumentCommand.AssetClassId), $"AssetClass '{command.AssetClassId}' does not exist");
         }
 
         var sectorExists = await dbContext.Sectors
@@ -365,7 +428,7 @@ public sealed class InstrumentCommandService
 
         if (!sectorExists)
         {
-            return UpdateInstrumentResult.BadRequest($"Sector with ID {command.SectorId} does not exist");
+            return UpdateInstrumentResult.BadRequest(nameof(UpdateInstrumentCommand.SectorId), $"Sector with ID {command.SectorId} does not exist");
         }
 
         var exchangeExists = await dbContext.Exchanges
@@ -373,7 +436,7 @@ public sealed class InstrumentCommandService
 
         if (!exchangeExists)
         {
-            return UpdateInstrumentResult.BadRequest($"Exchange with ID {command.ExchangeId} does not exist");
+            return UpdateInstrumentResult.BadRequest(nameof(UpdateInstrumentCommand.ExchangeId), $"Exchange with ID {command.ExchangeId} does not exist");
         }
 
         var currencyExists = await dbContext.Currencies
@@ -381,7 +444,7 @@ public sealed class InstrumentCommandService
 
         if (!currencyExists)
         {
-            return UpdateInstrumentResult.BadRequest($"Currency with ID {command.CurrencyId} does not exist");
+            return UpdateInstrumentResult.BadRequest(nameof(UpdateInstrumentCommand.CurrencyId), $"Currency with ID {command.CurrencyId} does not exist");
         }
 
         var issuerExists = await dbContext.Issuers
@@ -389,13 +452,76 @@ public sealed class InstrumentCommandService
 
         if (!issuerExists)
         {
-            return UpdateInstrumentResult.BadRequest($"Issuer with ID {command.IssuerId} does not exist");
+            return UpdateInstrumentResult.BadRequest(nameof(UpdateInstrumentCommand.IssuerId), $"Issuer with ID {command.IssuerId} does not exist");
+        }
+
+        var additionalIdentifiers = command.AdditionalIdentifiers
+            ?.Where(item => !string.IsNullOrWhiteSpace(item.IdentifierValue))
+            .Where(item => !string.IsNullOrWhiteSpace(item.IdentifierTypeId))
+            .Where(item => !string.Equals(item.IdentifierTypeId, "ISIN", StringComparison.OrdinalIgnoreCase))
+            .Select(item => new
+            {
+                IdentifierTypeId = item.IdentifierTypeId.Trim().ToUpperInvariant(),
+                IdentifierValue = item.IdentifierValue.Trim()
+            })
+            .GroupBy(item => item.IdentifierTypeId, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList() ?? [];
+
+        var validatedAdditionalIdentifiers = new List<(string IdentifierTypeId, string IdentifierValue)>();
+
+        foreach (var additionalIdentifier in additionalIdentifiers)
+        {
+            var typeExists = await dbContext.IdentifierTypes
+                .AnyAsync(item => item.IdentifierTypeId == additionalIdentifier.IdentifierTypeId, cancellationToken);
+
+            if (!typeExists)
+            {
+                return UpdateInstrumentResult.BadRequest(
+                    $"{nameof(UpdateInstrumentCommand.AdditionalIdentifiers)}[{additionalIdentifier.IdentifierTypeId}].{nameof(AdditionalIdentifierInput.IdentifierTypeId)}",
+                    $"Identifier type '{additionalIdentifier.IdentifierTypeId}' does not exist");
+            }
+
+            if (!IdentifierFormatValidator.TryNormalizeAndValidate(
+                    additionalIdentifier.IdentifierTypeId,
+                    additionalIdentifier.IdentifierValue,
+                    out var normalizedIdentifierValue,
+                    out var additionalIdentifierValidationError))
+            {
+                return UpdateInstrumentResult.BadRequest(
+                    $"{nameof(UpdateInstrumentCommand.AdditionalIdentifiers)}[{additionalIdentifier.IdentifierTypeId}].{nameof(AdditionalIdentifierInput.IdentifierValue)}",
+                    additionalIdentifierValidationError!);
+            }
+
+            validatedAdditionalIdentifiers.Add((additionalIdentifier.IdentifierTypeId, normalizedIdentifierValue));
+        }
+
+        var conflictingIdentifiers = new List<string>();
+        foreach (var additionalIdentifier in validatedAdditionalIdentifiers)
+        {
+            var exists = await dbContext.InstrumentIdentifiers
+                .AnyAsync(
+                    item => item.InstrumentId != id
+                        && item.IdentifierTypeId == additionalIdentifier.IdentifierTypeId
+                        && item.IdentifierValue == additionalIdentifier.IdentifierValue,
+                    cancellationToken);
+
+            if (exists)
+            {
+                conflictingIdentifiers.Add($"{additionalIdentifier.IdentifierTypeId} ({additionalIdentifier.IdentifierValue})");
+            }
+        }
+
+        if (conflictingIdentifiers.Count > 0)
+        {
+            return UpdateInstrumentResult.Conflict($"Duplicate value(s) detected for: {string.Join(", ", conflictingIdentifiers)}.");
         }
 
         var changedAt = DateTime.UtcNow;
         var hasBusinessChanges = false;
 
         hasBusinessChanges |= ApplyChange("name", instrument.Name, command.Name, value => instrument.Name = value, id, changedAt);
+        hasBusinessChanges |= ApplyChange("primary_isin", instrument.PrimaryIsin, normalizedIsin, value => instrument.PrimaryIsin = value, id, changedAt);
         hasBusinessChanges |= ApplyChange("asset_class_id", instrument.AssetClassId, command.AssetClassId, value => instrument.AssetClassId = value, id, changedAt);
         hasBusinessChanges |= ApplyChange("sector_id", instrument.SectorId.ToString(), command.SectorId.ToString(), value => instrument.SectorId = int.Parse(value), id, changedAt);
         hasBusinessChanges |= ApplyChange("exchange_id", instrument.ExchangeId.ToString(), command.ExchangeId.ToString(), value => instrument.ExchangeId = int.Parse(value), id, changedAt);
@@ -410,13 +536,158 @@ public sealed class InstrumentCommandService
             id,
             changedAt);
 
+        var desiredIdentifierValues = validatedAdditionalIdentifiers
+            .ToDictionary(item => item.IdentifierTypeId, item => item.IdentifierValue, StringComparer.OrdinalIgnoreCase);
+        desiredIdentifierValues["ISIN"] = normalizedIsin;
+
+        var existingIdentifiers = await dbContext.InstrumentIdentifiers
+            .Where(item => item.InstrumentId == id)
+            .ToListAsync(cancellationToken);
+
+        foreach (var existingIdentifier in existingIdentifiers)
+        {
+            if (desiredIdentifierValues.TryGetValue(existingIdentifier.IdentifierTypeId, out var desiredValue))
+            {
+                if (!string.Equals(existingIdentifier.IdentifierValue, desiredValue, StringComparison.Ordinal))
+                {
+                    AddAuditEntry(
+                        $"identifier_{existingIdentifier.IdentifierTypeId}",
+                        existingIdentifier.IdentifierValue,
+                        desiredValue,
+                        id,
+                        changedAt);
+
+                    existingIdentifier.IdentifierValue = desiredValue;
+                    existingIdentifier.EffectiveDate = command.EffectiveDate;
+                    existingIdentifier.ExpiryDate = null;
+                    hasBusinessChanges = true;
+                }
+
+                desiredIdentifierValues.Remove(existingIdentifier.IdentifierTypeId);
+                continue;
+            }
+
+            if (string.Equals(existingIdentifier.IdentifierTypeId, "ISIN", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            AddAuditEntry(
+                $"identifier_{existingIdentifier.IdentifierTypeId}",
+                existingIdentifier.IdentifierValue,
+                null,
+                id,
+                changedAt);
+
+            dbContext.InstrumentIdentifiers.Remove(existingIdentifier);
+            hasBusinessChanges = true;
+        }
+
+        foreach (var missingIdentifier in desiredIdentifierValues)
+        {
+            var identifierTypeId = missingIdentifier.Key.ToUpperInvariant();
+            var identifierValue = missingIdentifier.Value;
+
+            dbContext.InstrumentIdentifiers.Add(new InstrumentIdentifier
+            {
+                IdentifierId = $"ID-{identifierTypeId}-{id}",
+                InstrumentId = id,
+                IdentifierTypeId = identifierTypeId,
+                IdentifierValue = identifierValue,
+                EffectiveDate = command.EffectiveDate,
+            });
+
+            AddAuditEntry(
+                $"identifier_{identifierTypeId}",
+                null,
+                identifierValue,
+                id,
+                changedAt);
+
+            hasBusinessChanges = true;
+        }
+
         if (hasBusinessChanges)
         {
             instrument.LastUpdated = DateOnly.FromDateTime(changedAt);
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            var conflictDetails = await BuildUpdateConflictDetailsAsync(
+                id,
+                normalizedIsin,
+                validatedAdditionalIdentifiers,
+                cancellationToken);
+
+            return UpdateInstrumentResult.Conflict(conflictDetails);
+        }
+
         return UpdateInstrumentResult.Updated();
+    }
+
+    private async Task<string> BuildUpdateConflictDetailsAsync(
+        string instrumentId,
+        string normalizedIsin,
+        IReadOnlyCollection<(string IdentifierTypeId, string IdentifierValue)> additionalIdentifiers,
+        CancellationToken cancellationToken)
+    {
+        var conflicts = new List<string>();
+
+        var primaryIsinExists = await dbContext.Instruments
+            .AsNoTracking()
+            .AnyAsync(item => item.InstrumentId != instrumentId && item.PrimaryIsin == normalizedIsin, cancellationToken);
+        if (primaryIsinExists)
+        {
+            conflicts.Add($"PrimaryIsin '{normalizedIsin}'");
+        }
+
+        foreach (var additionalIdentifier in additionalIdentifiers)
+        {
+            var exists = await dbContext.InstrumentIdentifiers
+                .AsNoTracking()
+                .AnyAsync(
+                    item => item.InstrumentId != instrumentId
+                        && item.IdentifierTypeId == additionalIdentifier.IdentifierTypeId
+                        && item.IdentifierValue == additionalIdentifier.IdentifierValue,
+                    cancellationToken);
+
+            if (exists)
+            {
+                conflicts.Add($"{additionalIdentifier.IdentifierTypeId} ({additionalIdentifier.IdentifierValue})");
+            }
+        }
+
+        if (conflicts.Count == 0)
+        {
+            return "A unique constraint was violated while updating the instrument.";
+        }
+
+        return $"Duplicate value(s) detected for: {string.Join(", ", conflicts)}.";
+    }
+
+    private void AddAuditEntry(
+        string fieldName,
+        string? oldValue,
+        string? newValue,
+        string instrumentId,
+        DateTime changedAt)
+    {
+        dbContext.InstrumentAudits.Add(new InstrumentAudit
+        {
+            AuditId = $"AUD-{Guid.NewGuid():N}",
+            InstrumentId = instrumentId,
+            ChangedAt = changedAt,
+            ChangedBy = "system.api",
+            FieldName = fieldName,
+            OldValue = oldValue,
+            NewValue = newValue,
+            ChangeSource = "PUT /api/instruments/{id}"
+        });
     }
 
     private bool ApplyChange(
@@ -434,17 +705,7 @@ public sealed class InstrumentCommandService
 
         apply(newValue);
 
-        dbContext.InstrumentAudits.Add(new InstrumentAudit
-        {
-            AuditId = $"AUD-{Guid.NewGuid():N}",
-            InstrumentId = instrumentId,
-            ChangedAt = changedAt,
-            ChangedBy = "system.api",
-            FieldName = fieldName,
-            OldValue = oldValue,
-            NewValue = newValue,
-            ChangeSource = "PUT /api/instruments/{id}"
-        });
+        AddAuditEntry(fieldName, oldValue, newValue, instrumentId, changedAt);
 
         return true;
     }
