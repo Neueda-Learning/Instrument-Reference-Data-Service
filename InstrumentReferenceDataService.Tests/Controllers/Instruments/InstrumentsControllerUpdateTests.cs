@@ -29,12 +29,14 @@ public sealed class InstrumentsControllerUpdateTests : IClassFixture<TestWebAppl
 
         var token = NextToken();
         var instrumentId = $"INS-UPD-{token}";
-        dbContext.Instruments.Add(CreateInstrument(instrumentId, BuildUniqueIsin(token, '1')));
+        var primaryIsin = BuildUniqueIsin(token, '1');
+        dbContext.Instruments.Add(CreateInstrument(instrumentId, primaryIsin));
         await dbContext.SaveChangesAsync();
 
         var request = new
         {
             Name = "Updated Name",
+            PrimaryIsin = primaryIsin,
             AssetClassId = "EQ",
             SectorId = 1,
             ExchangeId = 1,
@@ -61,12 +63,14 @@ public sealed class InstrumentsControllerUpdateTests : IClassFixture<TestWebAppl
 
         var token = NextToken();
         var instrumentId = $"INS-UPD-{token}";
-        dbContext.Instruments.Add(CreateInstrument(instrumentId, BuildUniqueIsin(token, '2')));
+        var primaryIsin = BuildUniqueIsin(token, '2');
+        dbContext.Instruments.Add(CreateInstrument(instrumentId, primaryIsin));
         await dbContext.SaveChangesAsync();
 
         var request = new
         {
             Name = "Renamed Instrument",
+            PrimaryIsin = primaryIsin,
             AssetClassId = "EQ",
             SectorId = 1,
             ExchangeId = 1,
@@ -117,6 +121,7 @@ public sealed class InstrumentsControllerUpdateTests : IClassFixture<TestWebAppl
         var request = new
         {
             Name = "Updated Name",
+            PrimaryIsin = BuildUniqueIsin(NextToken(), '4'),
             AssetClassId = "EQ",
             SectorId = 1,
             ExchangeId = 1,
@@ -143,7 +148,16 @@ public sealed class InstrumentsControllerUpdateTests : IClassFixture<TestWebAppl
 
         var token = NextToken();
         var instrumentId = $"INS-UPD-{token}";
-        dbContext.Instruments.Add(CreateInstrument(instrumentId, BuildUniqueIsin(token, '3')));
+        var primaryIsin = BuildUniqueIsin(token, '3');
+        dbContext.Instruments.Add(CreateInstrument(instrumentId, primaryIsin));
+        dbContext.InstrumentIdentifiers.Add(new InstrumentIdentifier
+        {
+            IdentifierId = $"ID-ISIN-{instrumentId}",
+            InstrumentId = instrumentId,
+            IdentifierTypeId = "ISIN",
+            IdentifierValue = primaryIsin,
+            EffectiveDate = new DateOnly(2026, 1, 1),
+        });
         await dbContext.SaveChangesAsync();
 
         var beforeCount = await dbContext.InstrumentAudits
@@ -153,6 +167,7 @@ public sealed class InstrumentsControllerUpdateTests : IClassFixture<TestWebAppl
         var request = new
         {
             Name = $"Instrument {instrumentId}",
+            PrimaryIsin = primaryIsin,
             AssetClassId = "EQ",
             SectorId = 1,
             ExchangeId = 1,
@@ -173,6 +188,118 @@ public sealed class InstrumentsControllerUpdateTests : IClassFixture<TestWebAppl
             .CountAsync(item => item.InstrumentId == instrumentId);
 
         Assert.Equal(beforeCount, afterCount);
+    }
+
+    [Fact]
+    public async Task PutInstrument_UpdatesIdentifiers_AddsAndRemovesOptionalTypes()
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        await SeedRequiredReferenceDataAsync(dbContext);
+
+        var token = NextToken();
+        var instrumentId = $"INS-UPD-{token}";
+        var originalIsin = BuildUniqueIsin(token, '5');
+        var updatedIsin = BuildUniqueIsin(token, '6');
+
+        dbContext.Instruments.Add(CreateInstrument(instrumentId, originalIsin));
+        dbContext.InstrumentIdentifiers.AddRange(
+            new InstrumentIdentifier
+            {
+                IdentifierId = $"ID-ISIN-{instrumentId}",
+                InstrumentId = instrumentId,
+                IdentifierTypeId = "ISIN",
+                IdentifierValue = originalIsin,
+                EffectiveDate = new DateOnly(2026, 1, 1),
+            },
+            new InstrumentIdentifier
+            {
+                IdentifierId = $"ID-CUSIP-{instrumentId}",
+                InstrumentId = instrumentId,
+                IdentifierTypeId = "CUSIP",
+                IdentifierValue = "LS9BSD30F",
+                EffectiveDate = new DateOnly(2026, 1, 1),
+            });
+        await dbContext.SaveChangesAsync();
+
+        var request = new
+        {
+            Name = "Renamed Instrument",
+            PrimaryIsin = updatedIsin,
+            AssetClassId = "EQ",
+            SectorId = 1,
+            ExchangeId = 1,
+            CurrencyId = 1,
+            IssuerId = 1,
+            Status = "Pending",
+            EffectiveDate = new DateOnly(2026, 3, 10),
+            AdditionalIdentifiers = new[]
+            {
+                new { IdentifierTypeId = "RIC", IdentifierValue = "XETR.5NWWCP" }
+            }
+        };
+
+        var client = factory.CreateClient();
+        var response = await client.PutAsJsonAsync($"/api/instruments/{instrumentId}", request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        var identifiers = await dbContext.InstrumentIdentifiers
+            .AsNoTracking()
+            .Where(item => item.InstrumentId == instrumentId)
+            .ToListAsync();
+
+        Assert.Contains(identifiers, item => item.IdentifierTypeId == "ISIN" && item.IdentifierValue == updatedIsin);
+        Assert.DoesNotContain(identifiers, item => item.IdentifierTypeId == "CUSIP");
+        Assert.Contains(identifiers, item => item.IdentifierTypeId == "RIC" && item.IdentifierValue == "XETR.5NWWCP");
+    }
+
+    [Fact]
+    public async Task PutInstrument_WithInvalidAdditionalIdentifierFormat_ReturnsBadRequest()
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        await SeedRequiredReferenceDataAsync(dbContext);
+
+        var token = NextToken();
+        var instrumentId = $"INS-UPD-{token}";
+        var primaryIsin = BuildUniqueIsin(token, '7');
+        dbContext.Instruments.Add(CreateInstrument(instrumentId, primaryIsin));
+        dbContext.InstrumentIdentifiers.Add(new InstrumentIdentifier
+        {
+            IdentifierId = $"ID-ISIN-{instrumentId}",
+            InstrumentId = instrumentId,
+            IdentifierTypeId = "ISIN",
+            IdentifierValue = primaryIsin,
+            EffectiveDate = new DateOnly(2026, 1, 1),
+        });
+        await dbContext.SaveChangesAsync();
+
+        var request = new
+        {
+            Name = "Updated Name",
+            PrimaryIsin = primaryIsin,
+            AssetClassId = "EQ",
+            SectorId = 1,
+            ExchangeId = 1,
+            CurrencyId = 1,
+            IssuerId = 1,
+            Status = "Active",
+            EffectiveDate = new DateOnly(2026, 2, 1),
+            AdditionalIdentifiers = new[]
+            {
+                new { IdentifierTypeId = "CUSIP", IdentifierValue = "BAD" }
+            }
+        };
+
+        var client = factory.CreateClient();
+        var response = await client.PutAsJsonAsync($"/api/instruments/{instrumentId}", request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("Invalid CUSIP identifier format", body, StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task SeedRequiredReferenceDataAsync(AppDbContext dbContext)
@@ -227,6 +354,33 @@ public sealed class InstrumentsControllerUpdateTests : IClassFixture<TestWebAppl
                     Country = "United States",
                     Timezone = "America/New_York",
                     CurrencyId = 1
+                });
+            }
+
+            if (!await dbContext.IdentifierTypes.AnyAsync(item => item.IdentifierTypeId == "ISIN"))
+            {
+                dbContext.IdentifierTypes.Add(new IdentifierType
+                {
+                    IdentifierTypeId = "ISIN",
+                    IdentifierTypeName = "International Securities Identification Number"
+                });
+            }
+
+            if (!await dbContext.IdentifierTypes.AnyAsync(item => item.IdentifierTypeId == "CUSIP"))
+            {
+                dbContext.IdentifierTypes.Add(new IdentifierType
+                {
+                    IdentifierTypeId = "CUSIP",
+                    IdentifierTypeName = "Committee on Uniform Securities Identification Procedures"
+                });
+            }
+
+            if (!await dbContext.IdentifierTypes.AnyAsync(item => item.IdentifierTypeId == "RIC"))
+            {
+                dbContext.IdentifierTypes.Add(new IdentifierType
+                {
+                    IdentifierTypeId = "RIC",
+                    IdentifierTypeName = "Refinitiv Instrument Code"
                 });
             }
 

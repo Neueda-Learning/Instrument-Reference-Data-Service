@@ -13,7 +13,7 @@ import ChatWindow from './components/ChatWindow'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
-function mapCreateValidationErrors(rawErrors) {
+function mapValidationErrors(rawErrors) {
   if (!rawErrors || typeof rawErrors !== 'object') {
     return {}
   }
@@ -122,6 +122,7 @@ function App() {
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [editError, setEditError] = useState('')
   const [editSubmitError, setEditSubmitError] = useState('')
+  const [editFieldErrors, setEditFieldErrors] = useState({})
   const [editSuccess, setEditSuccess] = useState('')
   const [addOptions, setAddOptions] = useState(null)
   const [isLoadingAdd, setIsLoadingAdd] = useState(false)
@@ -381,6 +382,7 @@ function App() {
     setIsLoadingEdit(true)
     setEditError('')
     setEditSubmitError('')
+    setEditFieldErrors({})
     setEditSuccess('')
 
     try {
@@ -423,6 +425,7 @@ function App() {
 
     setEditError('')
     setEditSubmitError('')
+    setEditFieldErrors({})
     setEditSuccess('')
     setIsSavingEdit(true)
 
@@ -435,8 +438,29 @@ function App() {
         body: JSON.stringify(payload),
       })
 
+      if (response.status === 409) {
+        const message = await response.text()
+        setEditSubmitError(message || 'An instrument with one or more identifier values already exists.')
+        return
+      }
+
       if (!response.ok) {
-        throw new Error(`Update failed with status ${response.status}`)
+        if (response.status === 400) {
+          const contentType = response.headers.get('content-type') ?? ''
+          if (contentType.includes('application/problem+json') || contentType.includes('application/json')) {
+            const validationPayload = await response.json().catch(() => null)
+            const mappedValidationErrors = mapValidationErrors(validationPayload?.errors)
+            if (Object.keys(mappedValidationErrors).length > 0) {
+              setEditFieldErrors(mappedValidationErrors)
+              setEditSubmitError(validationPayload?.title || 'Please correct the highlighted fields and try again.')
+              return
+            }
+          }
+        }
+
+        const message = await response.text()
+        setEditSubmitError(message || `Update failed with status ${response.status}.`)
+        return
       }
 
       await loadEditContext(editInstrumentId)
@@ -455,6 +479,7 @@ function App() {
     setCurrentPage('home')
     setEditError('')
     setEditSubmitError('')
+    setEditFieldErrors({})
     setEditSuccess('')
   }
 
@@ -555,7 +580,7 @@ function App() {
           const contentType = response.headers.get('content-type') ?? ''
           if (contentType.includes('application/problem+json') || contentType.includes('application/json')) {
             const validationPayload = await response.json().catch(() => null)
-            const mappedValidationErrors = mapCreateValidationErrors(validationPayload?.errors)
+            const mappedValidationErrors = mapValidationErrors(validationPayload?.errors)
             if (Object.keys(mappedValidationErrors).length > 0) {
               setAddFieldErrors(mappedValidationErrors)
               setAddSubmitError(validationPayload?.title || 'Please correct the highlighted fields and try again.')
@@ -875,6 +900,7 @@ function App() {
               isSaving={isSavingEdit}
               error={editSubmitError}
               success={editSuccess}
+                serverErrors={editFieldErrors}
               onSubmit={handleSaveEdit}
               onCancel={handleCancelEdit}
             />

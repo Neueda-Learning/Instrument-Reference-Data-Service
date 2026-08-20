@@ -932,6 +932,7 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
 
         var request = new UpdateInstrumentRequest(
             "Updated Name",
+            primaryIsin,
             "NONEXISTENT",
             1,
             1,
@@ -984,6 +985,7 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
 
         var request = new UpdateInstrumentRequest(
             "Updated Name",
+            primaryIsin,
             "EQ",
             99999,
             1,
@@ -1036,6 +1038,7 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
 
         var request = new UpdateInstrumentRequest(
             "Updated Name",
+            primaryIsin,
             "EQ",
             1,
             99999,
@@ -1088,6 +1091,7 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
 
         var request = new UpdateInstrumentRequest(
             "Updated Name",
+            primaryIsin,
             "EQ",
             1,
             1,
@@ -1140,6 +1144,7 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
 
         var request = new UpdateInstrumentRequest(
             "Updated Name",
+            primaryIsin,
             "EQ",
             1,
             1,
@@ -1192,6 +1197,7 @@ public sealed class InstrumentsControllerTests : IAsyncLifetime
 
         var request = new UpdateInstrumentRequest(
             "Updated Name",
+            primaryIsin,
             "EQ",
             1,
             1,
