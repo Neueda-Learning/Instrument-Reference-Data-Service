@@ -79,6 +79,32 @@ If port `5173` is already in use, Vite will automatically use the next available
 The API will be available at `http://localhost:5105`.  
 The OpenAPI/Swagger spec is available at `http://localhost:5105/swagger/ui` (when built in Debug mode).
 
+### 9. Run with Docker (API + Frontend + MySQL)
+
+From the repository root:
+
+```bash
+docker compose up --build
+```
+
+Services:
+
+- Frontend: `http://localhost:5173`
+- API: `http://localhost:5105`
+- MySQL: `localhost:3306`
+
+To stop and remove containers:
+
+```bash
+docker compose down
+```
+
+To also remove database data volume:
+
+```bash
+docker compose down -v
+```
+
 ## API Documentation
 
 ### Base URL
@@ -197,44 +223,6 @@ curl -X GET "http://localhost:5105/api/instruments?cusip=000000001" \
 ```
 
 ---
-
-<<<<<<< HEAD
-#### Contract Lookup Endpoints
-
-The API contract includes dedicated lookup routes:
-
-- `GET /api/instruments/lookup?isin={isin}`
-- `GET /api/instruments/lookup?cusip={cusip}`
-
-Current implementation behavior:
-
-- `GET /api/instruments?isin={isin}`
-- `GET /api/instruments?cusip={cusip}`
-
-Equivalent request examples:
-
-```bash
-# Contract-style lookup by ISIN
-curl -X GET "http://localhost:5105/api/instruments/lookup?isin=US0000000001" \
-  -H "Accept: application/json"
-
-# Contract-style lookup by CUSIP
-curl -X GET "http://localhost:5105/api/instruments/lookup?cusip=000000001" \
-  -H "Accept: application/json"
-
-# Current implementation lookup by ISIN
-curl -X GET "http://localhost:5105/api/instruments?isin=US0000000001" \
-  -H "Accept: application/json"
-
-# Current implementation lookup by CUSIP
-curl -X GET "http://localhost:5105/api/instruments?cusip=000000001" \
-  -H "Accept: application/json"
-```
-
----
-
-=======
->>>>>>> d84bf0ec78191b914f62e418a306472267365919
 #### 2. Get Instrument by ID
 Retrieve a specific instrument by its ID.
 
