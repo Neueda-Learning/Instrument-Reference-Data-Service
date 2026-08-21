@@ -6,6 +6,9 @@ namespace InstrumentReferenceDataService.Services;
 
 public sealed class MockDataGenerator
 {
+    private const string SedolLeadingLetters = "BCDFGHJKLMNPQRSTVWXYZ";
+    private const string SedolBodyAlphabet = "0123456789BCDFGHJKLMNPQRSTVWXYZ";
+
     private sealed record MockIssuerSeed(int IssuerId, string IssuerName);
 
     private static readonly MockIssuerSeed[] IssuerSeeds =
@@ -217,7 +220,7 @@ public sealed class MockDataGenerator
         var tickerRoot = BuildTickerRoot(issuerName);
         var tickerSuffix = BuildStableToken($"{instrumentId}-ticker", 4);
         var cusip = BuildStableToken($"{instrumentId}-cusip", 9);
-        var sedol = $"B{BuildStableToken($"{instrumentId}-sedol", 6)}";
+        var sedol = BuildSedol($"{instrumentId}-sedol");
         var ricSuffix = BuildStableToken($"{instrumentId}-ric", 6);
 
         foreach (var identifierType in identifierTypes)
@@ -315,9 +318,59 @@ public sealed class MockDataGenerator
         return new string(letters).ToUpperInvariant().PadRight(4, 'X');
     }
 
+    private static string BuildSedol(string seed)
+    {
+        var leadingLetter = BuildStableToken(seed, 1, SedolLeadingLetters)[0];
+        var body = BuildStableToken(seed, 5, SedolBodyAlphabet);
+        var candidate = $"{leadingLetter}{body}";
+        var checkDigit = CalculateSedolCheckDigit(candidate);
+        return $"{candidate}{checkDigit}";
+    }
+
+    private static int CalculateSedolCheckDigit(string sedolWithoutCheckDigit)
+    {
+        if (sedolWithoutCheckDigit.Length != 6)
+        {
+            throw new ArgumentException("SEDOL base must contain exactly 6 characters.", nameof(sedolWithoutCheckDigit));
+        }
+
+        var sum = 0;
+
+        for (var index = 0; index < sedolWithoutCheckDigit.Length; index++)
+        {
+            var weight = index switch
+            {
+                0 => 1,
+                1 => 3,
+                2 => 1,
+                3 => 7,
+                4 => 3,
+                _ => 9
+            };
+            sum += GetSedolCharacterValue(sedolWithoutCheckDigit[index]) * weight;
+        }
+
+        return (10 - (sum % 10)) % 10;
+    }
+
+    private static int GetSedolCharacterValue(char value)
+    {
+        if (char.IsDigit(value))
+        {
+            return value - '0';
+        }
+
+        return char.ToUpperInvariant(value) - 'A' + 10;
+    }
+
     private static string BuildStableToken(string value, int length)
     {
         const string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        return BuildStableToken(value, length, alphabet);
+    }
+
+    private static string BuildStableToken(string value, int length, string alphabet)
+    {
         const ulong offsetBasis = 14695981039346656037;
         const ulong prime = 1099511628211;
 
