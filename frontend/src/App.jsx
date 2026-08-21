@@ -12,6 +12,7 @@ import ThemeToggle from './components/ThemeToggle'
 import ChatWindow from './components/ChatWindow'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
+const SIMPLE_SEARCH_DEBOUNCE_MS = 300
 
 function mapValidationErrors(rawErrors) {
   if (!rawErrors || typeof rawErrors !== 'object') {
@@ -101,9 +102,10 @@ function sortInstrumentRows(items, sortBy, sortDirection) {
 
 function App() {
   const [currentPage, setCurrentPage] = useState('home')
+  const [name, setName] = useState('')
   const [isin, setIsin] = useState('')
   const [cusip, setCusip] = useState('')
-  const [appliedFilters, setAppliedFilters] = useState({ isin: '', cusip: '' })
+  const [appliedFilters, setAppliedFilters] = useState({ name: '', isin: '', cusip: '' })
   const [rows, setRows] = useState([])
   const [homeTotalCount, setHomeTotalCount] = useState(0)
   const [isLoadingHome, setIsLoadingHome] = useState(false)
@@ -189,9 +191,9 @@ function App() {
         return
       }
 
-      const hasIdentifierSearch = Boolean(appliedFilters.isin || appliedFilters.cusip)
+      const hasSimpleSearch = Boolean(appliedFilters.name || appliedFilters.isin || appliedFilters.cusip)
 
-      if (hasIdentifierSearch) {
+      if (hasSimpleSearch) {
         const response = await fetch(`${API_BASE_URL}/api/instruments`)
         if (!response.ok) {
           throw new Error(`Request failed with status ${response.status}`)
@@ -201,13 +203,15 @@ function App() {
         const allItems = Array.isArray(allItemsPayload) ? allItemsPayload : []
 
         const filteredItems = allItems.filter((item) => {
+          const instrumentName = String(item.instrument?.name ?? '').toLowerCase()
           const isinValue = pickIdentifierValue(item.identifiers, 'ISIN').toUpperCase()
           const cusipValue = pickIdentifierValue(item.identifiers, 'CUSIP').toUpperCase()
 
+          const nameMatches = !appliedFilters.name || instrumentName.includes(appliedFilters.name.toLowerCase())
           const isinMatches = !appliedFilters.isin || isinValue.includes(appliedFilters.isin)
           const cusipMatches = !appliedFilters.cusip || cusipValue.includes(appliedFilters.cusip)
 
-          return isinMatches && cusipMatches
+          return nameMatches && isinMatches && cusipMatches
         })
 
         const sortedItems = sortInstrumentRows(filteredItems, sortBy, sortDirection)
@@ -265,21 +269,35 @@ function App() {
   }, [loadHomeInstruments])
 
   useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setAppliedFilters({
+        name: name.trim(),
+        isin: isin.trim().toUpperCase(),
+        cusip: cusip.trim().toUpperCase(),
+      })
+      setHomePage(1)
+    }, SIMPLE_SEARCH_DEBOUNCE_MS)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [name, isin, cusip])
+
+  const handleSearch = (event) => {
+    event.preventDefault()
     setAppliedFilters({
+      name: name.trim(),
       isin: isin.trim().toUpperCase(),
       cusip: cusip.trim().toUpperCase(),
     })
     setHomePage(1)
-  }, [isin, cusip])
-
-  const handleSearch = async (event) => {
-    event.preventDefault()
   }
 
   const handleReset = async () => {
+    setName('')
     setIsin('')
     setCusip('')
-    setAppliedFilters({ isin: '', cusip: '' })
+    setAppliedFilters({ name: '', isin: '', cusip: '' })
     setMonitorQuickFilter({
       type: 'all',
       staleAfterDays: 30,
@@ -300,7 +318,7 @@ function App() {
     setHomePage(1)
   }
 
-  const hasActiveFilters = Boolean(appliedFilters.isin || appliedFilters.cusip)
+  const hasActiveFilters = Boolean(appliedFilters.name || appliedFilters.isin || appliedFilters.cusip)
 
   useEffect(() => {
     if (!selectedInstrumentId && rows.length > 0) {
@@ -708,11 +726,13 @@ function App() {
 
           {!useAdvancedSearch && (
             <InstrumentSearchForm
+              name={name}
               isin={isin}
               cusip={cusip}
               isLoading={isLoadingHome}
               hasActiveFilters={hasActiveFilters}
               lastQuery={appliedFilters}
+              onNameChange={setName}
               onIsinChange={setIsin}
               onCusipChange={setCusip}
               onSearch={handleSearch}

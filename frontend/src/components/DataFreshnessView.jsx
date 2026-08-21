@@ -95,6 +95,9 @@ function DataFreshnessView({ filters, onOpenMetadata, activeQuickFilter, onApply
         if (filters?.cusip) {
           query.set('cusip', filters.cusip)
         }
+        if (filters?.name) {
+          query.set('name', filters.name)
+        }
 
         const response = await fetch(`${API_BASE_URL}/api/instruments/monitoring?${query.toString()}`)
         if (!response.ok) {
